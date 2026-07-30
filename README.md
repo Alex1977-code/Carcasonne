@@ -16,9 +16,16 @@ auf den Homescreen installierbar (PWA), komplett ohne Server.
   - 🏨 **Wirtshäuser & Kathedralen** – 18 Zusatzkarten, Wirtshäuser (Straßen
     zählen doppelt), Kathedralen (Städte ×3), **großer Meeple**
   - 👑 **König & Räuber** – Bonuspunkte für die größte Stadt und die längste Straße
-- **Viel mehr Karten**: Kartensatz wählbar – Standard (72), Groß (108), Riesig (144)
-- **Mehrspieler**: 2–6 Spieler am selben Gerät (Hotseat), freie Mischung aus
-  Menschen und Computergegnern
+- **Viel mehr Karten**: Kartensatz wählbar – Standard (72), Groß (144),
+  **Riesig (288)** Basiskarten; aktive Erweiterungen zählen mehrfach mit
+  (Riesig mit allem: über 400 Karten)
+- **Mehrspieler**:
+  - 2–6 Spieler am selben Gerät (Hotseat)
+  - 🌐 **Online auf mehreren Geräten**: Raum erstellen, Code teilen,
+    Mitspieler treten auf ihren Handys bei (WebRTC über PeerJS, kein eigener
+    Server nötig; Codes mit „T“ verbinden zwei Tabs im selben Browser).
+    Bricht ein Gast ab, übernimmt die KI seinen Platz.
+  - freie Mischung aus Menschen und Computergegnern
 - **Drei Computergegner-Stärken**: Bauer (leicht), Ritter (mittel),
   Baumeister (schwer, blockt und plant Wiesen)
 - **Spielernamen-Eingabe**, Farbwahl je Spieler
@@ -70,7 +77,9 @@ Struktur:
 | `js/engine/ai.js` | Computergegner (3 Stärken, heuristische Bewertung) |
 | `js/ui/render.js` | Prozedurale Kartengrafik und Board-Renderer (Canvas) |
 | `js/ui/sound.js` | Soundeffekte und generative Musik (WebAudio) |
+| `js/ui/net.js` | Online-Mehrspieler (PeerJS/WebRTC + BroadcastChannel) |
 | `js/ui/main.js` | Bildschirme, Touch-Steuerung, Spielablauf, Speicher |
+| `js/lib/peerjs.min.js` | PeerJS-Bibliothek (MIT-Lizenz, eingebettet) |
 | `tests/` | Engine-Tests (Node, ohne Abhängigkeiten) |
 
 Die Engine ist frei von DOM-Zugriffen und läuft auch in Node – dadurch sind

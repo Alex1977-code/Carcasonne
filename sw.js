@@ -1,5 +1,5 @@
 // Service Worker – Offline-Cache für Carcassonne Mobile
-const CACHE = 'carcassonne-v1';
+const CACHE = 'carcassonne-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,9 @@ const ASSETS = [
   './js/engine/ai.js',
   './js/ui/render.js',
   './js/ui/sound.js',
+  './js/ui/net.js',
   './js/ui/main.js',
+  './js/lib/peerjs.min.js',
   './manifest.webmanifest',
   './icon.svg',
 ];

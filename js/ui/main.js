@@ -1,7 +1,7 @@
 // ============================================================
 // Carcassonne Mobile – App-Steuerung
 // ============================================================
-import { DEFS } from '../engine/tiles.js';
+import { DEFS, deckSizeFor } from '../engine/tiles.js';
 import {
   newGame, cloneState, legalPlacements, placeCurrent, meepleOptions,
   finishTurn, serialize, resumeGame,
@@ -9,6 +9,7 @@ import {
 import { chooseMove } from '../engine/ai.js';
 import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld } from './render.js';
 import { sfx, applySoundOptions, unlockAudio, startMusic, stopMusic, soundState } from './sound.js';
+import { Net } from './net.js';
 
 const $ = (id) => document.getElementById(id);
 const COLORS = ['#e63946', '#2f7bdb', '#f4c430', '#3fa34d', '#454554', '#8e44ad'];
@@ -35,7 +36,11 @@ function showScreen(name) {
   if (name === 'scores') renderScores();
 }
 document.querySelectorAll('[data-back]').forEach(b =>
-  b.addEventListener('click', () => { sfx.click(); showScreen(backTarget); }));
+  b.addEventListener('click', () => {
+    sfx.click();
+    if (currentScreen === 'setup' && online && !online.started) teardownOnline();
+    showScreen(backTarget);
+  }));
 let backTarget = 'menu';
 
 // Audio nach erster Interaktion freischalten
@@ -108,6 +113,15 @@ let setup = Object.assign({
   expansions: { river: false, inns: false, king: false },
   deckScale: 1,
 }, store.get('setup', {}));
+if (![1, 2, 4].includes(setup.deckScale)) setup.deckScale = 1;
+
+// Online-Zustand (null = lokales Spiel)
+// { role:'host'|'guest', net, remotes:[{connId,name}], myIdx, started }
+let online = null;
+
+function totalPlayerCount() {
+  return setup.players.length + (online && online.role === 'host' ? online.remotes.length : 0);
+}
 
 function renderPlayerRows() {
   const wrap = $('playerRows');
@@ -146,7 +160,7 @@ function renderPlayerRows() {
       });
     type.addEventListener('change', () => { p.type = type.value; });
     row.append(dot, name, type);
-    if (setup.players.length > 2) {
+    if (setup.players.length > (online && online.role === 'host' && online.remotes.length ? 1 : 2)) {
       const rm = document.createElement('button');
       rm.className = 'remove';
       rm.textContent = '✕';
@@ -155,10 +169,45 @@ function renderPlayerRows() {
     }
     wrap.appendChild(row);
   });
-  $('btnAddPlayer').classList.toggle('hidden', setup.players.length >= 6);
+  // Online-Gäste als gesperrte Zeilen anzeigen (Host-Sicht)
+  if (online && online.role === 'host') {
+    online.remotes.forEach((r, i) => {
+      const row = document.createElement('div');
+      row.className = 'player-row remote';
+      const dot = document.createElement('div');
+      dot.className = 'color-dot';
+      dot.style.background = COLORS[remoteColor(i)];
+      const name = document.createElement('input');
+      name.type = 'text';
+      name.value = r.name || '…';
+      name.readOnly = true;
+      const tag = document.createElement('span');
+      tag.className = 'remote-tag';
+      tag.textContent = '🌐 online';
+      row.append(dot, name, tag);
+      wrap.appendChild(row);
+    });
+  }
+  $('btnAddPlayer').classList.toggle('hidden', totalPlayerCount() >= 6);
+}
+
+// freie Farbe für Gast i (nach den lokalen Spielern)
+function remoteColor(i) {
+  const used = setup.players.map(p => p.color);
+  const free = [];
+  for (let c = 0; c < COLORS.length; c++) if (!used.includes(c)) free.push(c);
+  return free[i % free.length] ?? (i % COLORS.length);
+}
+
+function updateDeckLabels() {
+  $('deckSeg').querySelectorAll('button').forEach(b => {
+    const n = deckSizeFor(setup.expansions, Number(b.dataset.scale));
+    b.querySelector('[data-count]').textContent = n + ' Karten';
+  });
 }
 
 $('btnAddPlayer').addEventListener('click', () => {
+  if (totalPlayerCount() >= 6) return;
   sfx.click();
   const used = setup.players.map(p => p.color);
   const color = COLORS.findIndex((_, i) => !used.includes(i));
@@ -174,9 +223,9 @@ $('btnAddPlayer').addEventListener('click', () => {
 $('exRiver').checked = !!setup.expansions.river;
 $('exInns').checked = !!setup.expansions.inns;
 $('exKing').checked = !!setup.expansions.king;
-$('exRiver').addEventListener('change', e => { setup.expansions.river = e.target.checked; });
-$('exInns').addEventListener('change', e => { setup.expansions.inns = e.target.checked; });
-$('exKing').addEventListener('change', e => { setup.expansions.king = e.target.checked; });
+$('exRiver').addEventListener('change', e => { setup.expansions.river = e.target.checked; updateDeckLabels(); });
+$('exInns').addEventListener('change', e => { setup.expansions.inns = e.target.checked; updateDeckLabels(); });
+$('exKing').addEventListener('change', e => { setup.expansions.king = e.target.checked; updateDeckLabels(); });
 
 $('deckSeg').querySelectorAll('button').forEach(b => {
   if (Number(b.dataset.scale) === setup.deckScale) {
@@ -195,6 +244,11 @@ $('btnStart').addEventListener('click', () => {
   sfx.click();
   setup.players.forEach((p, i) => { if (!p.name.trim()) p.name = DEFAULT_NAMES[i]; });
   store.set('setup', setup);
+  if (online && online.role === 'host') {
+    if (totalPlayerCount() < 2) { toastSetup('Mindestens 2 Spieler (Gäste oder lokal) nötig'); return; }
+    startOnlineGame();
+    return;
+  }
   const s = newGame({
     players: setup.players.map(p => ({ name: p.name.trim(), color: COLORS[p.color], type: p.type })),
     expansions: { ...setup.expansions },
@@ -204,7 +258,269 @@ $('btnStart').addEventListener('click', () => {
   startGameUI(s);
 });
 
+function toastSetup(text) {
+  alert(text);
+}
+
 renderPlayerRows();
+updateDeckLabels();
+
+// ============================================================
+// Online-Mehrspieler: Lobby & Protokoll
+// ============================================================
+function rosterForLobby() {
+  const locals = setup.players.map(p => ({
+    name: p.name, color: COLORS[p.color],
+    kind: p.type === 'human' ? 'human' : 'ai',
+  }));
+  const remotes = online.remotes.map((r, i) => ({
+    name: r.name || '…', color: COLORS[remoteColor(i)], kind: 'remote',
+  }));
+  return [...locals, ...remotes];
+}
+
+function broadcastLobby() {
+  if (!online || online.role !== 'host') return;
+  const roster = rosterForLobby();
+  online.remotes.forEach((r, i) => {
+    online.net.sendTo(r.connId, {
+      t: 'lobby', roster, you: setup.players.length + i,
+    });
+  });
+  $('hostStatus').textContent = online.remotes.length
+    ? `${online.remotes.length} Gast/Gäste verbunden – „Spiel starten“, wenn alle da sind.`
+    : 'Warte auf Mitspieler…';
+  renderPlayerRows();
+}
+
+$('btnHost').addEventListener('click', async () => {
+  sfx.click();
+  $('btnHost').disabled = true;
+  try {
+    const net = await Net.host(window.__carcHostCode || undefined);
+    online = { role: 'host', net, remotes: [], started: false };
+    wireHostNet(net);
+    $('onlineOff').classList.add('hidden');
+    $('onlineHost').classList.remove('hidden');
+    $('roomCode').textContent = net.code;
+    $('hostStatus').textContent = 'Warte auf Mitspieler…';
+    // Lokal reicht ab jetzt 1 Spieler
+    renderPlayerRows();
+  } catch (e) {
+    toastSetup(e.message || 'Online-Raum konnte nicht erstellt werden');
+  } finally {
+    $('btnHost').disabled = false;
+  }
+});
+
+function wireHostNet(net) {
+  net.onGuestJoin = () => { /* Name kommt mit hello */ };
+  net.onGuestLeave = (connId) => {
+    const i = online.remotes.findIndex(r => r.connId === connId);
+    if (i >= 0) {
+      const gone = online.remotes[i];
+      if (!online.started) {
+        online.remotes.splice(i, 1);
+        broadcastLobby();
+      } else {
+        remotePlayerLost(gone);
+      }
+    }
+  };
+  net.onMessage = (msg, connId) => {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.t === 'hello' && !online.started) {
+      if (totalPlayerCount() >= 6) {
+        net.sendTo(connId, { t: 'full' });
+        return;
+      }
+      const name = String(msg.name || 'Gast').slice(0, 14);
+      online.remotes.push({ connId, name });
+      broadcastLobby();
+      sfx.meeple();
+    } else if (msg.t === 'move' && online.started && G) {
+      const idx = online.remotes.findIndex(r => r.connId === connId);
+      const playerIdx = setup.players.length + idx;
+      if (idx >= 0) queueRemoteMove(msg.move, playerIdx, connId);
+    }
+  };
+}
+
+$('btnHostCancel').addEventListener('click', () => {
+  sfx.click();
+  teardownOnline();
+});
+
+function teardownOnline() {
+  if (online) {
+    try { online.net.broadcast && online.net.broadcast({ t: 'quit' }); } catch { /* egal */ }
+    if (online.role === 'guest') { try { online.net.sendToHost({ t: 'quit' }); } catch { /* egal */ } }
+    online.net.close();
+  }
+  online = null;
+  $('onlineOff').classList.remove('hidden');
+  $('onlineHost').classList.add('hidden');
+  $('joinModal').classList.add('hidden');
+  renderPlayerRows();
+}
+
+// ---- Gast-Seite ----
+$('btnJoin').addEventListener('click', () => {
+  sfx.click();
+  $('joinError').textContent = '';
+  $('joinForm').classList.remove('hidden');
+  $('joinLobby').classList.add('hidden');
+  $('joinName').value = setup.players.find(p => p.type === 'human')?.name || 'Gast';
+  $('joinModal').classList.remove('hidden');
+});
+$('btnJoinCancel').addEventListener('click', () => {
+  sfx.click();
+  teardownOnline();
+});
+
+$('btnJoinGo').addEventListener('click', async () => {
+  sfx.click();
+  const code = $('joinCode').value.trim().toUpperCase();
+  const name = $('joinName').value.trim() || 'Gast';
+  if (code.length < 4) { $('joinError').textContent = 'Bitte den Raum-Code eingeben.'; return; }
+  $('btnJoinGo').disabled = true;
+  $('joinError').textContent = 'Verbinde…';
+  try {
+    const net = await Net.join(code);
+    online = { role: 'guest', net, remotes: [], started: false, myIdx: -1 };
+    wireGuestNet(net);
+    net.sendToHost({ t: 'hello', name });
+    $('joinForm').classList.add('hidden');
+    $('joinLobby').classList.remove('hidden');
+    $('joinRoomCode').textContent = code;
+    $('joinError').textContent = '';
+  } catch (e) {
+    $('joinError').textContent = e.message || 'Verbindung fehlgeschlagen';
+  } finally {
+    $('btnJoinGo').disabled = false;
+  }
+});
+
+function wireGuestNet(net) {
+  net.onHostLost = () => {
+    if (online && online.started && G && G.phase !== 'over') {
+      alert('Verbindung zum Host verloren – das Spiel wird beendet.');
+      teardownOnline();
+      G = null;
+      showScreen('menu');
+    } else {
+      $('joinError').textContent = 'Verbindung zum Host verloren.';
+      teardownOnline();
+    }
+  };
+  net.onMessage = (msg) => {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.t === 'lobby') {
+      online.myIdx = msg.you;
+      const ul = $('joinRoster');
+      ul.innerHTML = '';
+      msg.roster.forEach((r, i) => {
+        const li = document.createElement('li');
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = r.color;
+        const nm = document.createElement('span');
+        nm.textContent = r.name + (i === msg.you ? ' (du)' : '') +
+          (r.kind === 'ai' ? ' 🤖' : r.kind === 'remote' && i !== msg.you ? ' 🌐' : '');
+        li.append(dot, nm);
+        ul.appendChild(li);
+      });
+    } else if (msg.t === 'full') {
+      $('joinError').textContent = 'Der Raum ist voll (max. 6 Spieler).';
+      teardownOnline();
+    } else if (msg.t === 'start') {
+      online.started = true;
+      $('joinModal').classList.add('hidden');
+      const players = msg.settings.players.map((p, i) => ({
+        ...p, type: i === online.myIdx ? 'human' : 'remote',
+      }));
+      const s = newGame({
+        players,
+        expansions: msg.settings.expansions,
+        deckScale: msg.settings.deckScale,
+        deckIds: msg.deckIds,
+        startId: msg.startId,
+      });
+      startGameUI(s);
+    } else if (msg.t === 'move' && G) {
+      queueRemoteMove(msg.move, msg.player, 'host');
+    } else if (msg.t === 'quit') {
+      net.onHostLost();
+    }
+  };
+}
+
+// ---- Start durch den Host ----
+function startOnlineGame() {
+  const locals = setup.players.map(p => ({
+    name: p.name.trim(), color: COLORS[p.color], type: p.type,
+  }));
+  const remotes = online.remotes.map((r, i) => ({
+    name: r.name, color: COLORS[remoteColor(i)], type: 'remote',
+  }));
+  const players = [...locals, ...remotes];
+  const s = newGame({
+    players,
+    expansions: { ...setup.expansions },
+    deckScale: setup.deckScale,
+  });
+  online.started = true;
+  const settingsWire = {
+    players: players.map(p => ({ name: p.name, color: p.color, type: p.type === 'remote' ? 'remote' : p.type })),
+    expansions: { ...setup.expansions },
+    deckScale: setup.deckScale,
+  };
+  online.remotes.forEach((r) => {
+    online.net.sendTo(r.connId, {
+      t: 'start', settings: settingsWire, deckIds: s.initialDeck, startId: s.startId,
+    });
+  });
+  startGameUI(s);
+}
+
+// ---- Züge über das Netz ----
+const netQueue = [];
+function queueRemoteMove(move, playerIdx, origin) {
+  if (!move) return;
+  netQueue.push({ move, playerIdx, origin });
+  pumpNet();
+}
+
+function pumpNet() {
+  if (!G || !online || G.phase !== 'place' || ui.aiBusy) return;
+  if (!netQueue.length) return;
+  const cur = G.players[G.current];
+  if (cur.type !== 'remote') return;
+  const item = netQueue.shift();
+  if (item.playerIdx !== G.current) {
+    console.warn('Zug außer der Reihe ignoriert', item);
+    pumpNet();
+    return;
+  }
+  ui.aiBusy = true;
+  playMove(item.move, item.origin);
+}
+
+// Gast-Verbindung bricht während des Spiels ab → KI übernimmt (Host)
+function remotePlayerLost(gone) {
+  if (!G || G.phase === 'over') return;
+  const idx = setup.players.length + online.remotes.findIndex(r => r.connId === gone.connId);
+  const p = G.players[idx];
+  if (p && p.type === 'remote') {
+    p.type = 'ai2';
+    toast(`${p.name} hat die Verbindung verloren – die KI übernimmt`, '#7cc4ff');
+    if (G.current === idx && G.phase === 'place' && !ui.aiBusy) {
+      ui.aiBusy = true;
+      setTimeout(aiTurn, 600);
+    }
+    updateHud();
+  }
+}
 
 // ============================================================
 // Spiel-Screen
@@ -216,6 +532,7 @@ let rafActive = false;
 
 function startGameUI(state) {
   G = state;
+  netQueue.length = 0;
   ui = {
     sel: null,             // gewählte Zelle {x,y,rot}
     undoSnap: null,
@@ -361,23 +678,63 @@ function processEvents(events) {
 // ---------- Zug-Ablauf ----------
 let previewRot = 0;
 
+function setNetStatus(text) {
+  const el = $('netStatus');
+  el.classList.toggle('hidden', !text);
+  if (text) el.textContent = text;
+}
+
 function nextTurnFlow(first = false) {
   updateHud();
-  if (G.phase === 'over') { endGame(); return; }
+  if (G.phase === 'over') { setNetStatus(null); endGame(); return; }
   previewRot = 0;
   ui.sel = null;
   ui.meeple = null;
   ui.bigNext = false;
   ui.undoSnap = null;
+  const cur = G.players[G.current];
   if (isHumanTurn()) {
-    if (!first || G.players.filter(p => p.type === 'human').length > 1) showTurnBanner();
+    setNetStatus(null);
+    if (!first || G.players.filter(p => p.type === 'human').length > 1 || online) showTurnBanner();
     if (G.players.length > 1) sfx.draw();
     updateHud();
+  } else if (cur.type === 'remote') {
+    showTurnBanner();
+    setNetStatus(`🌐 Warte auf ${cur.name}…`);
+    updateHud();
+    pumpNet();
   } else {
+    setNetStatus(null);
     ui.aiBusy = true;
     updateHud();
     setTimeout(aiTurn, first ? 650 : 500);
   }
+}
+
+// Führt einen konkreten Zug mit Animation aus (KI oder Netzwerk)
+async function playMove(mv, origin = null) {
+  ui.sel = { x: mv.x, y: mv.y, rot: mv.rot, valid: true };
+  ensureVisible(mv.x, mv.y);
+  updateHud();
+  await wait(options.anim ? 600 : 120);
+  if (!G || currentScreen !== 'game') return;
+  ui.sel = null;
+  try {
+    placeCurrent(G, mv.x, mv.y, mv.rot);
+  } catch (e) {
+    // Desync-Schutz: sollte nie passieren
+    console.error('Zug nicht anwendbar', mv, e);
+    ui.aiBusy = false;
+    return;
+  }
+  ui.lastPlaced = G.lastPlacedIdx;
+  ui.anim = { placedIdx: G.lastPlacedIdx, t0: performance.now() };
+  sfx.place();
+  updateHud();
+  await wait(options.anim ? 420 : 80);
+  if (!G || currentScreen !== 'game') return;
+  if (mv.meeple) sfx.meeple();
+  finishTurnSafe(mv.meeple, origin);
 }
 
 async function aiTurn(force = false) {
@@ -387,35 +744,38 @@ async function aiTurn(force = false) {
     finishTurnSafe(null);
     return;
   }
-  // Vorschau zeigen, dann platzieren
-  ui.sel = { x: mv.x, y: mv.y, rot: mv.rot, valid: true };
-  ensureVisible(mv.x, mv.y);
-  updateHud();
-  await wait(options.anim ? 600 : 120);
-  if (!G || currentScreen !== 'game') return;
-  ui.sel = null;
-  placeCurrent(G, mv.x, mv.y, mv.rot);
-  ui.lastPlaced = G.lastPlacedIdx;
-  ui.anim = { placedIdx: G.lastPlacedIdx, t0: performance.now() };
-  sfx.place();
-  updateHud();
-  await wait(options.anim ? 420 : 80);
-  if (!G || currentScreen !== 'game') return;
-  if (mv.meeple) sfx.meeple();
-  finishTurnSafe(mv.meeple);
+  playMove(mv);
 }
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
-function finishTurnSafe(meeple) {
+// origin: connId des Absenders (bei Netz-Zügen), damit der Host das Echo
+// nicht an den Absender zurückschickt
+function finishTurnSafe(meeple, origin = null) {
+  const mover = G.current;
   const events = finishTurn(G, meeple);
   processEvents(events);
   ui.aiBusy = false;
+  sendMoveIfOnline(mover, origin);
   autosave();
   nextTurnFlow();
 }
 
+function sendMoveIfOnline(mover, origin) {
+  if (!online || !online.started) return;
+  const mv = G.history[G.history.length - 1];
+  if (!mv) return;
+  const move = { x: mv.x, y: mv.y, rot: mv.rot, meeple: mv.m };
+  if (online.role === 'guest') {
+    if (mover === online.myIdx) online.net.sendToHost({ t: 'move', move });
+  } else {
+    // Host verteilt alle Züge; das Echo geht nicht an den Absender zurück
+    online.net.broadcast({ t: 'move', move, player: mover }, origin);
+  }
+}
+
 function autosave() {
+  if (online) return; // Online-Partien werden nicht gespeichert
   if (G.phase === 'over') { store.del('save'); return; }
   store.set('save', serialize(G));
 }
@@ -467,7 +827,7 @@ bc.addEventListener('pointermove', (e) => {
     moved = true;
     const [a, b] = [...pointers.values()];
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
-    const ns = Math.min(200, Math.max(24, pinchStart.scale * dist / pinchStart.dist));
+    const ns = Math.min(200, Math.max(14, pinchStart.scale * dist / pinchStart.dist));
     board.camTarget = null;
     board.cam.scale = ns;
   }
@@ -489,7 +849,7 @@ bc.addEventListener('wheel', (e) => {
   e.preventDefault();
   const f = e.deltaY < 0 ? 1.12 : 0.9;
   board.camTarget = null;
-  board.cam.scale = Math.min(200, Math.max(24, board.cam.scale * f));
+  board.cam.scale = Math.min(200, Math.max(14, board.cam.scale * f));
 }, { passive: false });
 
 function handleTap(sx, sy) {
@@ -611,8 +971,10 @@ $('btnToOptions').addEventListener('click', () => {
 $('btnQuit').addEventListener('click', () => {
   sfx.click();
   $('gameMenu').classList.add('hidden');
+  if (online) teardownOnline();
   store.del('save');
   G = null;
+  setNetStatus(null);
   showScreen('menu');
 });
 
@@ -648,6 +1010,8 @@ function showEndScreen() {
   // Highscores (nur Menschen)
   const isNew = saveHighscores();
   $('endHighscore').classList.toggle('hidden', !isNew);
+  // Revanche würde online aus dem Takt laufen
+  $('btnRematch').classList.toggle('hidden', !!online);
   showScreen('end');
 }
 
@@ -698,7 +1062,12 @@ $('btnRematch').addEventListener('click', () => {
   store.del('save');
   startGameUI(s);
 });
-$('btnEndMenu').addEventListener('click', () => { sfx.click(); G = null; showScreen('menu'); });
+$('btnEndMenu').addEventListener('click', () => {
+  sfx.click();
+  if (online) teardownOnline();
+  G = null;
+  showScreen('menu');
+});
 
 function renderScores() {
   const scores = store.get('scores', []);

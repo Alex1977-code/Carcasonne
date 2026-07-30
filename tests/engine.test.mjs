@@ -67,7 +67,15 @@ eq(opp(0), 2, 'opp N=S');
   const inns = buildDeck({ expansions: { inns: true }, deckScale: 1 });
   eq(inns.deck.length + 1, 72 + 18, 'Mit W&K: 90 Karten');
   const big = buildDeck({ expansions: {}, deckScale: 2 });
-  eq(big.deck.length + 1, 144, 'Riesiges Deck: 144 Karten');
+  eq(big.deck.length + 1, 144, 'Großes Deck: 144 Karten');
+  const huge = buildDeck({ expansions: {}, deckScale: 4 });
+  eq(huge.deck.length + 1, 288, 'Riesiges Deck: 288 Karten');
+  const hugeAll = buildDeck({ expansions: { river: true, inns: true }, deckScale: 4 });
+  eq(hugeAll.deck.length + 1, 288 + 2 + 40 + 72, 'Riesig + Erweiterungen skaliert');
+  const riverBig = buildDeck({ expansions: { river: true }, deckScale: 2 });
+  eq(riverBig.deck.filter(id => id === 'RV_SPRING').length, 0, 'nur eine Quelle (Start)');
+  eq(riverBig.deck.filter(id => id === 'RV_LAKE').length, 1, 'nur ein See');
+  eq(riverBig.deck[20], 'RV_LAKE', 'See nach 20 Fluss-Mittelteilen');
 }
 
 // ---------- 3. Legalität & einfache Stadtwertung ----------

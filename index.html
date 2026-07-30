@@ -42,6 +42,23 @@
       <h2>Neues Spiel</h2>
     </header>
     <div class="panel-scroll">
+      <div class="panel" id="onlinePanel">
+        <h3>Online-Mehrspieler <span class="hint">(mehrere Geräte)</span></h3>
+        <div id="onlineOff">
+          <div class="btn-row">
+            <button id="btnHost" class="btn small">🌐 Spiel erstellen</button>
+            <button id="btnJoin" class="btn small">🔗 Mit Code beitreten</button>
+          </div>
+          <p class="hint">Erstelle einen Raum und teile den Code – Mitspieler
+          treten auf ihren Handys bei. Codes mit „T“ verbinden zwei Tabs im
+          selben Browser.</p>
+        </div>
+        <div id="onlineHost" class="hidden">
+          <p class="room-line">Raum-Code: <b class="room-code" id="roomCode">…</b></p>
+          <p class="hint" id="hostStatus">Warte auf Mitspieler…</p>
+          <button id="btnHostCancel" class="btn small danger ghost">Raum schließen</button>
+        </div>
+      </div>
       <div class="panel">
         <h3>Spieler <span class="hint">(2–6, Name antippen &amp; ändern)</span></h3>
         <div id="playerRows"></div>
@@ -57,15 +74,33 @@
           <span><b>König &amp; Räuber</b><em>Bonus für größte Stadt &amp; längste Straße</em></span></label>
       </div>
       <div class="panel">
-        <h3>Kartensatz</h3>
+        <h3>Kartensatz <span class="hint">(Erweiterungen zählen mehrfach mit)</span></h3>
         <div class="seg" id="deckSeg">
-          <button data-scale="1" class="active">Standard<em>72 Karten</em></button>
-          <button data-scale="1.5">Groß<em>108 Karten</em></button>
-          <button data-scale="2">Riesig<em>144 Karten</em></button>
+          <button data-scale="1" class="active">Standard<em data-count>72 Karten</em></button>
+          <button data-scale="2">Groß<em data-count>144 Karten</em></button>
+          <button data-scale="4">Riesig<em data-count>288 Karten</em></button>
         </div>
       </div>
       <button id="btnStart" class="btn big primary">Spiel starten</button>
       <div class="spacer"></div>
+    </div>
+    <div id="joinModal" class="modal hidden">
+      <div class="modal-box">
+        <h3>Online beitreten</h3>
+        <div id="joinForm">
+          <input id="joinCode" class="text-input code-input" placeholder="CODE" maxlength="5"
+                 autocapitalize="characters" autocomplete="off" spellcheck="false">
+          <input id="joinName" class="text-input" placeholder="Dein Name" maxlength="14">
+          <p class="hint" id="joinError"></p>
+          <button id="btnJoinGo" class="btn big primary">Beitreten</button>
+        </div>
+        <div id="joinLobby" class="hidden">
+          <p class="room-line">Raum <b class="room-code" id="joinRoomCode"></b></p>
+          <ul id="joinRoster" class="roster"></ul>
+          <p class="hint">Warten auf den Start durch den Host…</p>
+        </div>
+        <button id="btnJoinCancel" class="btn big">Abbrechen</button>
+      </div>
     </div>
   </section>
 
@@ -94,6 +129,7 @@
       <button id="btnMute" class="btn icon round" title="Ton an/aus">🔊</button>
       <button id="btnGameMenu" class="btn icon round" title="Menü">☰</button>
     </div>
+    <div id="netStatus" class="hidden"></div>
     <div id="toasts"></div>
     <div id="gameMenu" class="modal hidden">
       <div class="modal-box">
@@ -201,6 +237,7 @@
   </section>
 
 </div>
+<script src="js/lib/peerjs.min.js"></script>
 <script type="module" src="js/ui/main.js"></script>
 </body>
 </html>

@@ -329,19 +329,19 @@ export function shuffle(arr, rnd = Math.random) {
   return arr;
 }
 
-// settings: { expansions:{river,inns,king}, deckScale: 1|1.5|2 }
+// settings: { expansions:{river,inns,king}, deckScale: 1|2|4 }
+// Der Kartensatz skaliert Basisspiel UND aktive Erweiterungen
+// (Standard ×1 = 72, Groß ×2 = 144, Riesig ×4 = 288 Basiskarten).
+// Beim Fluss bleiben Quelle und See einmalig, der Lauf wird länger.
 // Liefert { startId, deck } – deck wird per shift() gezogen.
 export function buildDeck(settings, rnd = Math.random) {
   const ex = settings.expansions || {};
-  const scale = settings.deckScale || 1;
+  const scale = Math.max(1, Math.round(settings.deckScale || 1));
   const main = [];
   for (const id in DEFS) {
     const d = DEFS[id];
-    if (d.set === 'base') {
-      const n = Math.round(d.count * scale);
-      for (let i = 0; i < n; i++) main.push(id);
-    } else if (d.set === 'ec' && ex.inns) {
-      for (let i = 0; i < d.count; i++) main.push(id);
+    if (d.set === 'base' || (d.set === 'ec' && ex.inns)) {
+      for (let i = 0; i < d.count * scale; i++) main.push(id);
     }
   }
   let startId;
@@ -358,7 +358,7 @@ export function buildDeck(settings, rnd = Math.random) {
     for (const id in DEFS) {
       const d = DEFS[id];
       if (d.set === 'river' && !d.riverStart && !d.riverEnd) {
-        for (let i = 0; i < d.count; i++) mids.push(id);
+        for (let i = 0; i < d.count * scale; i++) mids.push(id);
       }
     }
     shuffle(mids, rnd);
@@ -366,6 +366,14 @@ export function buildDeck(settings, rnd = Math.random) {
   }
   deck.push(...main);
   return { startId, deck };
+}
+
+// Gesamtzahl der Karten für die Setup-Anzeige
+export function deckSizeFor(expansions, scale) {
+  let n = 72 * scale;
+  if (expansions?.river) n += 2 + 10 * scale;
+  if (expansions?.inns) n += 18 * scale;
+  return n;
 }
 
 export function edgeAt(defId, rot, dir) {

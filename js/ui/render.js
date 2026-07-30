@@ -493,7 +493,7 @@ export class BoardView {
     }
     const r = this.canvas.getBoundingClientRect();
     const w = maxX - minX + 3, h = maxY - minY + 3;
-    const scale = Math.min(140, Math.max(34, Math.min(r.width / w, r.height / h)));
+    const scale = Math.min(140, Math.max(14, Math.min(r.width / w, r.height / h)));
     const tx = (minX + maxX) / 2, ty = (minY + maxY) / 2;
     if (animate) {
       this.camTarget = { x: tx, y: ty, scale };
