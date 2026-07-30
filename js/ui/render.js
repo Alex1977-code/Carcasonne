@@ -778,28 +778,6 @@ function woodPattern(ctx) {
   return ctx.createPattern(c, 'repeat');
 }
 
-function makeGlowSprite(color, fill = false) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 144;
-  const g = c.getContext('2d');
-  g.shadowColor = color;
-  g.shadowBlur = 20;
-  g.lineWidth = 5;
-  g.strokeStyle = color;
-  const p = new Path2D();
-  const r = 14;
-  p.moveTo(32 + r, 32);
-  p.arcTo(112, 32, 112, 112, r);
-  p.arcTo(112, 112, 32, 112, r);
-  p.arcTo(32, 112, 32, 32, r);
-  p.arcTo(32, 32, 112, 32, r);
-  p.closePath();
-  if (fill) { g.fillStyle = color.replace(/[\d.]+\)$/, '0.16)'); g.fill(p); }
-  g.stroke(p);
-  g.stroke(p);
-  return c;
-}
-
 let shadowSprite = null;
 function makeShadowSprite() {
   if (shadowSprite) return shadowSprite;
@@ -821,8 +799,6 @@ export class BoardView {
     this.ctx = canvas.getContext('2d');
     this.cam = { x: 0, y: 0, scale: 90 };
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.glowWhite = makeGlowSprite('rgba(255,255,255,0.9)', true);
-    this.glowGold = makeGlowSprite('rgba(255,205,110,0.9)');
   }
 
   resize() {
@@ -928,25 +904,19 @@ export class BoardView {
       ctx.drawImage(art, sx - ds / 2, sy - ds / 2, ds, ds);
       ctx.globalAlpha = 1;
     }
-    // zuletzt gelegte Karte: goldener Schein
-    if (view.lastPlaced != null && state.placed[view.lastPlaced]) {
-      const p = state.placed[view.lastPlaced];
-      const [sx, sy] = this.worldToScreen(p.x, p.y);
-      const gsc = s / 80;
-      ctx.globalAlpha = 0.45;
-      ctx.drawImage(this.glowGold, sx - 72 * gsc, sy - 72 * gsc, 144 * gsc, 144 * gsc);
-      ctx.globalAlpha = 1;
-    }
-
-    // legale Felder
+    // legale Felder: dezente, flache Markierung ohne Leuchten
     if (view.legal) {
-      const pulse = 0.4 + 0.2 * Math.sin(now / 320);
-      const gsc = s / 80;
+      const m = s * 0.07;
       for (const c of view.legal) {
         const [sx, sy] = this.worldToScreen(c.x, c.y);
-        ctx.globalAlpha = pulse;
-        ctx.drawImage(this.glowWhite, sx - 72 * gsc, sy - 72 * gsc, 144 * gsc, 144 * gsc);
-        ctx.globalAlpha = 1;
+        this.rounded(ctx, sx - s / 2 + m, sy - s / 2 + m, s - 2 * m, s - 2 * m, s * 0.07);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fill();
+        ctx.setLineDash([s * 0.08, s * 0.05]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
     }
 
@@ -958,9 +928,9 @@ export class BoardView {
       const art = tileArt(view.sel.defId, rot);
       ctx.drawImage(art, sx - s / 2, sy - s / 2, s, s);
       ctx.globalAlpha = 1;
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = valid ? 'rgba(90,225,130,0.95)' : 'rgba(240,80,80,0.95)';
-      this.rounded(ctx, sx - s / 2 + 1.5, sy - s / 2 + 1.5, s - 3, s - 3, s * 0.05);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = valid ? 'rgba(130,200,150,0.8)' : 'rgba(220,100,100,0.85)';
+      this.rounded(ctx, sx - s / 2 + 1, sy - s / 2 + 1, s - 2, s - 2, s * 0.04);
       ctx.stroke();
     }
 
