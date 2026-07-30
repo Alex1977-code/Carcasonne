@@ -2,7 +2,9 @@ name: Auf GitHub Pages veröffentlichen
 
 on:
   push:
-    branches: [ "main" ]
+    # Der Feature-Branch deployt mit, solange der PR offen ist;
+    # nach dem Merge liefert jeder Push auf main die neueste Version.
+    branches: [ "main", "claude/carcassonne-mobile-app-aju8y1" ]
   workflow_dispatch:
 
 permissions:
