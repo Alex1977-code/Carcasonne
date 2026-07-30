@@ -1,5 +1,10 @@
-// Service Worker – Offline-Cache für Carcassonne Mobile
-const CACHE = 'carcassonne-v2';
+// Service Worker – Offline-Cache mit automatischen Updates.
+// Strategie: Seiten (HTML) immer zuerst frisch aus dem Netz laden
+// (Offline-Fallback aus dem Cache), alle übrigen Dateien aus dem Cache
+// liefern und im Hintergrund aktualisieren („stale-while-revalidate“).
+// So bekommen installierte Geräte ohne manuelle Versionspflege immer
+// spätestens beim nächsten Öffnen die neueste Version.
+const CACHE = 'carcassonne-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -29,14 +34,34 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then(hit => hit ||
-      fetch(e.request).then(res => {
+  const req = e.request;
+  if (req.method !== 'GET' || !req.url.startsWith(self.location.origin)) return;
+
+  // Navigation/HTML: Netz zuerst, Cache als Offline-Fallback
+  if (req.mode === 'navigate' || req.url.endsWith('/index.html')) {
+    e.respondWith(
+      fetch(req).then(res => {
         const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
+        caches.open(CACHE).then(c => c.put('./index.html', copy));
         return res;
-      }).catch(() => caches.match('./index.html'))
-    )
+      }).catch(() =>
+        caches.match(req).then(hit => hit || caches.match('./index.html'))
+      )
+    );
+    return;
+  }
+
+  // Übrige Dateien: sofort aus dem Cache, parallel im Hintergrund erneuern
+  e.respondWith(
+    caches.match(req).then(hit => {
+      const refresh = fetch(req).then(res => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy));
+        }
+        return res;
+      }).catch(() => hit);
+      return hit || refresh;
+    })
   );
 });

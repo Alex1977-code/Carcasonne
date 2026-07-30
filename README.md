@@ -3,6 +3,15 @@
 Das beliebte Legespiel als moderne **Web-App fürs Handy** – offline spielbar,
 auf den Homescreen installierbar (PWA), komplett ohne Server.
 
+## 📱 Direkt spielen
+
+**➡️ https://alex1977-code.github.io/Carcasonne/**
+
+Link am Handy öffnen → Browser-Menü → **„Zum Startbildschirm hinzufügen“**.
+Danach startet das Spiel wie eine App im Vollbild. Jeder Push auf `main`
+veröffentlicht automatisch die neueste Version (GitHub Actions → Pages);
+installierte Geräte aktualisieren sich beim nächsten Öffnen von selbst.
+
 > Privates Fan-Projekt. Alle Grafiken werden prozedural im Code gezeichnet,
 > es werden keine Original-Assets verwendet. „Carcassonne“ ist ein Spiel von
 > Klaus-Jürgen Wrede (Hans im Glück Verlag).
@@ -37,7 +46,7 @@ auf den Homescreen installierbar (PWA), komplett ohne Server.
 - **Autospeichern**: laufende Partie jederzeit unterbrechen und fortsetzen
 - **Touch-Steuerung**: Ziehen = verschieben, Kneifen = zoomen, Tippen = legen
 
-## 🚀 Spielen
+## 🚀 Lokal starten
 
 Die App ist reines HTML/CSS/JavaScript ohne Build-Schritt:
 
@@ -46,12 +55,6 @@ Die App ist reines HTML/CSS/JavaScript ohne Build-Schritt:
 python3 -m http.server 8080
 # dann http://localhost:8080 im Browser öffnen
 ```
-
-Am Handy: Seite öffnen → Browser-Menü → **„Zum Startbildschirm hinzufügen“** –
-danach startet das Spiel wie eine App im Vollbild und funktioniert offline.
-
-Am einfachsten dauerhaft erreichbar über **GitHub Pages**:
-Repository-Einstellungen → Pages → Branch `main`, Ordner `/ (root)`.
 
 ## 🕹️ Kurzanleitung
 
