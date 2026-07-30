@@ -90,7 +90,7 @@ export function tileArt(defId, rot) {
   ctx.rotate(rot * Math.PI / 2);
   ctx.translate(-ART_SIZE / 2, -ART_SIZE / 2);
   ctx.scale(ART_SIZE, ART_SIZE);
-  paintTile(ctx, DEFS[defId]);
+  paintTile(ctx, DEFS[defId], rot);
   ctx.restore();
   // Kante mit leichtem Relief (nicht mitrotiert)
   const s = ART_SIZE;
@@ -106,7 +106,7 @@ export function tileArt(defId, rot) {
   return c;
 }
 
-function paintTile(ctx, d) {
+function paintTile(ctx, d, rot = 0) {
   const rnd = mulberry(hash(d.id));
   paintGrass(ctx, rnd);
   const busyness = d.f.filter(f => f.t !== 'field').length;
@@ -114,11 +114,20 @@ function paintTile(ctx, d) {
   for (const f of d.f) if (f.t === 'river') paintRiver(ctx, d, f);
   for (const f of d.f) if (f.t === 'road') paintRoad(ctx, d, f);
   if (d.f.filter(f => f.t === 'road').length >= 3) paintPlaza(ctx, rnd);
-  for (const f of d.f) if (f.t === 'city') paintCity(ctx, d, f);
-  for (const f of d.f) if (f.t === 'city') paintCityDeko(ctx, f);
-  for (const f of d.f) if (f.t === 'mon') paintMonastery(ctx, f);
-  for (const f of d.f) if (f.t === 'road' && f.inn) paintInn(ctx, f);
+  for (const f of d.f) if (f.t === 'city') paintCity(ctx, d, f, rot);
+  for (const f of d.f) if (f.t === 'city') paintCityDeko(ctx, f, rot);
+  for (const f of d.f) if (f.t === 'mon') paintMonastery(ctx, f, rot);
+  for (const f of d.f) if (f.t === 'road' && f.inn) paintInn(ctx, f, rot);
   paintFlowers(ctx, d, rnd);
+}
+
+// Dekor bleibt aufrecht, egal wie die Karte gedreht liegt
+function upright(ctx, x, y, rot, draw) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-rot * Math.PI / 2);
+  draw();
+  ctx.restore();
 }
 
 // ----- Wiese -----
@@ -211,7 +220,8 @@ function roadEndpoint(d, edge) {
   const bigCity = d.f.find(f => f.t === 'city' && f.e.length >= 2);
   if (bigCity) return toC(0.55);
   const anyCity = d.f.some(f => f.t === 'city');
-  return toC(anyCity ? 0.72 : 0.7);
+  // Sackgasse an einer Stadtkappe führt bis ans Stadttor
+  return toC(anyCity ? 1.16 : 0.7);
 }
 
 function wayPath(ctx, pts, curved) {
@@ -236,13 +246,13 @@ function strokePass(ctx, pts, curved, width, style, dash = null, alpha = 1) {
 
 function roadPoints(d, f) {
   if (f.e.length === 1) return [EDGE_MID[f.e[0]], roadEndpoint(d, f.e[0])];
-  if (f.e.length === 2) return [EDGE_MID[f.e[0]], [0.5, 0.5], EDGE_MID[f.e[1]]];
+  if (f.e.length === 2) return [EDGE_MID[f.e[0]], f.ctrl || [0.5, 0.5], EDGE_MID[f.e[1]]];
   return f.e.map(e => EDGE_MID[e]);
 }
 
 function paintRoad(ctx, d, f) {
   const pts = roadPoints(d, f);
-  const curved = !(f.e.length === 2 && (f.e[0] + 2) % 4 === f.e[1]);
+  const curved = !!f.ctrl || !(f.e.length === 2 && (f.e[0] + 2) % 4 === f.e[1]);
   strokePass(ctx, pts, curved, 0.2, 'rgba(60,40,15,0.25)');       // weicher Rand
   strokePass(ctx, pts, curved, 0.165, '#7d6543');                  // Erdkante
   strokePass(ctx, pts, curved, 0.12, '#e9dcb6');                   // Weg
@@ -279,7 +289,13 @@ function paintPlaza(ctx, rnd) {
 // ----- Fluss -----
 function paintRiver(ctx, d, f) {
   const pts = roadPoints(d, f);
-  const curved = !(f.e.length === 2 && (f.e[0] + 2) % 4 === f.e[1]);
+  let curved = !(f.e.length === 2 && (f.e[0] + 2) % 4 === f.e[1]);
+  // Fluss weicht einer Stadt auf derselben Karte aus (Bogen ums Ufer)
+  const city = d.f.find(x => x.t === 'city');
+  if (city && pts.length === 3) {
+    pts[1] = [0.5 + (0.5 - city.spot[0]) * 0.55, 0.5 + (0.5 - city.spot[1]) * 0.55];
+    curved = true;
+  }
   strokePass(ctx, pts, curved, 0.34, '#cfc39b');                    // Uferband
   strokePass(ctx, pts, curved, 0.3, 'rgba(90,80,45,0.35)');        // Uferkante
   strokePass(ctx, pts, curved, 0.26, '#2b5f95');
@@ -315,7 +331,12 @@ function paintRiver(ctx, d, f) {
 }
 
 // ----- Stadt -----
-// Regionen + Mauerpfade in kanonischer Lage, per Matrix rotiert
+// Einheitliches Geometrie-System, damit Karten in JEDER Kombination
+// nahtlos zusammenpassen:
+//  - jede Stadtkante ist am Kartenrand auf VOLLER Breite bedeckt
+//  - jede Mauer endet exakt in einer Kartenecke und verlässt sie
+//    senkrecht zur Kante → Mauern benachbarter Karten fließen ohne
+//    Knick ineinander (zwei Kappen ergeben z. B. ein rundes Oval)
 function cityPaths(edges) {
   const set = edges.slice().sort((a, b) => a - b);
   let k = 0;
@@ -336,26 +357,45 @@ function cityPaths(edges) {
     raw.rect(-0.02, -0.02, 1.04, 1.04);
     hasWall = false;
   } else if (set.length === 1) {
-    raw.moveTo(-0.02, -0.02); raw.lineTo(1.02, -0.02); raw.lineTo(1, 0);
-    raw.quadraticCurveTo(0.5, 0.62, 0, 0); raw.closePath();
-    rawWall.moveTo(1, 0); rawWall.quadraticCurveTo(0.5, 0.62, 0, 0);
-  } else if (set.length === 2 && (set[1] - set[0]) % 4 === 2) {
-    raw.moveTo(0.16, -0.02);
-    raw.quadraticCurveTo(0.3, 0.5, 0.16, 1.02);
-    raw.lineTo(0.84, 1.02);
-    raw.quadraticCurveTo(0.7, 0.5, 0.84, -0.02);
+    // Kappe an N: U-Bogen, senkrecht in den Ecken, Tiefe 0.375
+    raw.moveTo(0, -0.02); raw.lineTo(1, -0.02); raw.lineTo(1, 0);
+    raw.bezierCurveTo(1, 0.5, 0, 0.5, 0, 0);
     raw.closePath();
-    rawWall.moveTo(0.16, -0.02); rawWall.quadraticCurveTo(0.3, 0.5, 0.16, 1.02);
-    rawWall.moveTo(0.84, -0.02); rawWall.quadraticCurveTo(0.7, 0.5, 0.84, 1.02);
+    rawWall.moveTo(1, 0); rawWall.bezierCurveTo(1, 0.5, 0, 0.5, 0, 0);
+  } else if (set.length === 2 && (set[1] - set[0]) % 4 === 2) {
+    // Band N-S: volle Breite an beiden Stadtkanten, seitliche
+    // Wiesen-Taschen (Tiefe 0.15), senkrecht in allen vier Ecken
+    raw.moveTo(0, -0.02); raw.lineTo(1, -0.02); raw.lineTo(1, 0);
+    raw.bezierCurveTo(1, 0.33, 0.85, 0.33, 0.85, 0.5);
+    raw.bezierCurveTo(0.85, 0.67, 1, 0.67, 1, 1);
+    raw.lineTo(1, 1.02); raw.lineTo(0, 1.02); raw.lineTo(0, 1);
+    raw.bezierCurveTo(0, 0.67, 0.15, 0.67, 0.15, 0.5);
+    raw.bezierCurveTo(0.15, 0.33, 0, 0.33, 0, 0);
+    raw.closePath();
+    rawWall.moveTo(1, 0);
+    rawWall.bezierCurveTo(1, 0.33, 0.85, 0.33, 0.85, 0.5);
+    rawWall.bezierCurveTo(0.85, 0.67, 1, 0.67, 1, 1);
+    rawWall.moveTo(0, 0);
+    rawWall.bezierCurveTo(0, 0.33, 0.15, 0.33, 0.15, 0.5);
+    rawWall.bezierCurveTo(0.15, 0.67, 0, 0.67, 0, 1);
   } else if (set.length === 2) {
-    raw.moveTo(1.02, -0.02); raw.lineTo(-0.02, -0.02); raw.lineTo(-0.02, 1.02); raw.lineTo(0, 1);
-    raw.quadraticCurveTo(0.66, 0.66, 1, 0); raw.closePath();
-    rawWall.moveTo(0, 1); rawWall.quadraticCurveTo(0.66, 0.66, 1, 0);
+    // Ecke N+W: Bogen von SW-Ecke (senkrecht) über (0.56,0.56)
+    // zur NO-Ecke (waagerecht)
+    raw.moveTo(1, -0.02); raw.lineTo(-0.02, -0.02); raw.lineTo(-0.02, 1);
+    raw.lineTo(0, 1);
+    raw.bezierCurveTo(0, 0.76, 0.40, 0.72, 0.56, 0.56);
+    raw.bezierCurveTo(0.72, 0.40, 0.76, 0, 1, 0);
+    raw.closePath();
+    rawWall.moveTo(0, 1);
+    rawWall.bezierCurveTo(0, 0.76, 0.40, 0.72, 0.56, 0.56);
+    rawWall.bezierCurveTo(0.72, 0.40, 0.76, 0, 1, 0);
   } else {
-    raw.moveTo(-0.02, 1.02); raw.lineTo(-0.02, -0.02); raw.lineTo(1.02, -0.02);
-    raw.lineTo(1.02, 1.02); raw.lineTo(1, 1);
-    raw.quadraticCurveTo(0.5, 0.6, 0, 1); raw.closePath();
-    rawWall.moveTo(1, 1); rawWall.quadraticCurveTo(0.5, 0.6, 0, 1);
+    // 3 Kanten, offen nach S: Wiesen-Tasche unten (Tiefe ~0.285)
+    raw.moveTo(-0.02, 1); raw.lineTo(-0.02, -0.02); raw.lineTo(1.02, -0.02);
+    raw.lineTo(1.02, 1); raw.lineTo(1, 1);
+    raw.bezierCurveTo(1, 0.62, 0, 0.62, 0, 1);
+    raw.closePath();
+    rawWall.moveTo(1, 1); rawWall.bezierCurveTo(1, 0.62, 0, 0.62, 0, 1);
   }
   region.addPath(raw, m);
   walls.addPath(rawWall, m);
@@ -364,7 +404,7 @@ function cityPaths(edges) {
 
 const ROOFS = ['#b5502e', '#a34627', '#c2662f', '#8f3d22', '#ad5a35', '#96482a'];
 
-function paintCity(ctx, d, f) {
+function paintCity(ctx, d, f, rot = 0) {
   const { region, walls } = cityPaths(f.e);
   const rnd = mulberry(hash(d.id + ':' + f.e.join('')));
   // Grundfläche: warmes Pflaster
@@ -381,24 +421,28 @@ function paintCity(ctx, d, f) {
     ctx.fillStyle = rnd() > 0.5 ? 'rgba(255,235,200,0.10)' : 'rgba(90,50,20,0.10)';
     ctx.fillRect(x, y, 0.014, 0.014);
   }
-  // Häuser einstreuen (nur wo wirklich Stadtfläche ist)
+  // Häuser einstreuen (nur wo wirklich Stadtfläche ist).
+  // isPointInPath erwartet Geräte-Koordinaten → von Hand transformieren.
+  const M = ctx.getTransform();
+  const inside = (x, y) => {
+    const pt = M.transformPoint(new DOMPoint(x, y));
+    return ctx.isPointInPath(region, pt.x, pt.y);
+  };
   const houses = [];
-  for (let i = 0; i < 30 && houses.length < 9; i++) {
+  for (let i = 0; i < 48 && houses.length < 11; i++) {
     const w = 0.1 + rnd() * 0.05;
     const h = w * (0.75 + rnd() * 0.3);
     const x = 0.03 + rnd() * 0.94, y = 0.06 + rnd() * 0.9;
-    const top = y - h * 0.52, bot = y + h * 0.42;
-    if (ctx.isPointInPath(region, x, y) &&
-        ctx.isPointInPath(region, x - w * 0.62, top) &&
-        ctx.isPointInPath(region, x + w * 0.62, top) &&
-        ctx.isPointInPath(region, x - w * 0.62, bot) &&
-        ctx.isPointInPath(region, x + w * 0.62, bot) &&
-        !houses.some(o => Math.abs(o.x - x) < (o.w + w) * 0.62 && Math.abs(o.y - y) < (o.h + h) * 0.62)) {
+    const r = Math.max(w * 0.68, h * 0.62);
+    if (inside(x, y) &&
+        inside(x - r, y - r) && inside(x + r, y - r) &&
+        inside(x - r, y + r) && inside(x + r, y + r) &&
+        !houses.some(o => Math.abs(o.x - x) < (o.w + w) * 0.66 && Math.abs(o.y - y) < (o.h + h) * 0.66)) {
       houses.push({ x, y, w, h, roof: ROOFS[(rnd() * ROOFS.length) | 0] });
     }
   }
   houses.sort((a, b) => a.y - b.y);
-  for (const hs of houses) paintHouse(ctx, hs);
+  for (const hs of houses) upright(ctx, hs.x, hs.y, rot, () => paintHouse(ctx, hs));
   ctx.restore();
   // Stadtmauer mit Zinnen
   if (walls) {
@@ -422,7 +466,8 @@ function paintCity(ctx, d, f) {
   }
 }
 
-function paintHouse(ctx, { x, y, w, h, roof }) {
+function paintHouse(ctx, { w, h, roof }) {
+  const x = 0, y = 0;
   // Schatten
   ctx.beginPath();
   ctx.ellipse(x + 0.012, y + h * 0.4, w * 0.62, h * 0.2, 0, 0, Math.PI * 2);
@@ -552,18 +597,21 @@ function paintCathedral(ctx, x, y) {
   ctx.restore();
 }
 
-function paintCityDeko(ctx, f) {
+function paintCityDeko(ctx, f, rot = 0) {
   const [sx, sy] = f.spot;
-  if (f.cath) paintCathedral(ctx, sx, sy - 0.04);
-  if (f.shield >= 1) paintShield(ctx, f.cath ? sx - 0.3 : sx - (f.e.length > 1 ? 0.16 : 0.17), f.cath ? sy : sy - (f.e.length === 1 ? 0.0 : 0.14), 0.058);
-  if (f.shield >= 2) paintShield(ctx, sx + 0.16, sy - 0.14, 0.058);
+  if (f.cath) upright(ctx, sx, sy - 0.04, rot, () => paintCathedral(ctx, 0, 0));
+  const s1x = f.cath ? sx - 0.3 : sx - (f.e.length > 1 ? 0.16 : 0.17);
+  const s1y = f.cath ? sy : sy - (f.e.length === 1 ? 0.0 : 0.14);
+  if (f.shield >= 1) upright(ctx, s1x, s1y, rot, () => paintShield(ctx, 0, 0, 0.058));
+  if (f.shield >= 2) upright(ctx, sx + 0.16, sy - 0.14, rot, () => paintShield(ctx, 0, 0, 0.058));
 }
 
 // ----- Kloster -----
-function paintMonastery(ctx, f) {
+function paintMonastery(ctx, f, rot = 0) {
   const [cx, cy] = f.spot;
   ctx.save();
   ctx.translate(cx, cy);
+  ctx.rotate(-rot * Math.PI / 2);
   // Hof & Schatten
   ctx.beginPath(); ctx.ellipse(0.012, 0.14, 0.23, 0.075, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(20,10,5,0.28)'; ctx.fill();
@@ -636,11 +684,12 @@ function paintMonastery(ctx, f) {
 }
 
 // ----- Wirtshaus -----
-function paintInn(ctx, f) {
+function paintInn(ctx, f, rot = 0) {
   const [sx, sy] = f.spot;
   const x = Math.min(0.8, sx + 0.17), y = Math.max(0.2, sy - 0.15);
   ctx.save();
   ctx.translate(x, y);
+  ctx.rotate(-rot * Math.PI / 2);
   ctx.beginPath(); ctx.ellipse(0.008, 0.085, 0.11, 0.03, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(20,10,5,0.3)'; ctx.fill();
   const wg = ctx.createLinearGradient(0, -0.02, 0, 0.08);
@@ -884,14 +933,14 @@ export class BoardView {
       const p = state.placed[view.lastPlaced];
       const [sx, sy] = this.worldToScreen(p.x, p.y);
       const gsc = s / 80;
-      ctx.globalAlpha = 0.85;
+      ctx.globalAlpha = 0.45;
       ctx.drawImage(this.glowGold, sx - 72 * gsc, sy - 72 * gsc, 144 * gsc, 144 * gsc);
       ctx.globalAlpha = 1;
     }
 
     // legale Felder
     if (view.legal) {
-      const pulse = 0.55 + 0.3 * Math.sin(now / 320);
+      const pulse = 0.4 + 0.2 * Math.sin(now / 320);
       const gsc = s / 80;
       for (const c of view.legal) {
         const [sx, sy] = this.worldToScreen(c.x, c.y);
