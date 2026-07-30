@@ -1,0 +1,16 @@
+{
+  "name": "Carcassonne – Mobile Edition",
+  "short_name": "Carcassonne",
+  "description": "Das Legespiel für unterwegs: Basisspiel, Erweiterungen, KI-Gegner, Highscores.",
+  "lang": "de",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#242a36",
+  "theme_color": "#242a36",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
