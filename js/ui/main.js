@@ -840,6 +840,7 @@ bc.addEventListener('pointermove', (e) => {
     }
   } else if (pointers.size === 2 && pinchStart) {
     moved = true;
+    board.freezeCache();
     const [a, b] = [...pointers.values()];
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
     const ns = Math.min(200, Math.max(14, pinchStart.scale * dist / pinchStart.dist));
@@ -850,7 +851,7 @@ bc.addEventListener('pointermove', (e) => {
 function pointerEnd(e) {
   const wasSingle = pointers.size === 1;
   pointers.delete(e.pointerId);
-  if (pointers.size < 2) pinchStart = null;
+  if (pointers.size < 2) { pinchStart = null; board.thawCache(); }
   if (pointers.size === 1) {
     const [a] = [...pointers.values()];
     dragStart = { x: a.x, y: a.y, camX: board.cam.x, camY: board.cam.y };

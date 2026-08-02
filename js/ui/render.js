@@ -9,6 +9,9 @@ import { find } from '../engine/game.js';
 import { drawFields } from './render/fields.js';
 import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
+import { registerLayer, renderTile } from './render/layers.js';
+import { TileCache } from './render/cache.js';
+import { LOD, LOD_ORDER, lodFor, renderSizeFor, detailLevel, hairline } from './render/contract.js';
 
 // ---------- Hilfen ----------
 function mulberry(seed) {
@@ -86,26 +89,112 @@ export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true 
 }
 
 // ---------- Kartengrafik ----------
-const artCache = new Map();
-export const ART_SIZE = 192;
+// Gezeichnet wird über die Layer-Registry: die Reihenfolge steht in
+// layers.js (LAYER_ORDER) und nicht mehr im Aufrufverlauf. Jeder Layer
+// bekommt einen eigenen Zufallsstrom, dadurch verschiebt eine Änderung an
+// einem Layer die Details der übrigen nicht mehr.
+//
+// Der Cache hält Motiv × Rotation × Detailstufe mit harter Obergrenze
+// (LRU). Bisher wuchs er unbegrenzt: 49 Motive × 4 Drehungen à 192 px
+// waren rund 29 MB, die nie wieder freigegeben wurden.
+export const ART_SIZE = renderSizeFor(LOD.LARGE);
 
-export function tileArt(defId, rot) {
-  const k = defId + ':' + rot;
-  let c = artCache.get(k);
-  if (c) return c;
-  c = document.createElement('canvas');
-  c.width = c.height = ART_SIZE;
-  const ctx = c.getContext('2d');
+/**
+ * Der Cache des Pakets deckelt die Anzahl der Einträge. Das genügt hier
+ * nicht: eine Kachel der Stufe „large“ ist bei dpr 2 rund 1 MB, 240 davon
+ * wären über 250 MB. Deshalb zusätzlich eine Speicherobergrenze – verdrängt
+ * wird wie gehabt der am längsten ungenutzte Eintrag.
+ */
+class BudgetedTileCache extends TileCache {
+  constructor({ maxBytes = 40 * 1024 * 1024, ...rest } = {}) {
+    super(rest);
+    this.maxBytes = maxBytes;
+  }
+
+  _evict() {
+    super._evict();
+    while (this.entries.size > 1 && this.estimatedBytes() > this.maxBytes) {
+      let oldestKey = null, oldest = Infinity;
+      for (const [k, v] of this.entries) {
+        if (v.lastUsed < oldest) { oldest = v.lastUsed; oldestKey = k; }
+      }
+      if (oldestKey === null) break;
+      this.entries.delete(oldestKey);
+      this.stats.evictions++;
+    }
+  }
+}
+
+const tileCache = new BudgetedTileCache({
+  maxEntries: 240,
+  maxBytes: 40 * 1024 * 1024,
+  budgetPerFrame: 3,
+  dpr: Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1),
+});
+
+export { tileCache };
+
+// Renderer-Sicht auf ein Motiv, einmal je Kartentyp abgeleitet
+const tileViewCache = new Map();
+function tileView(defId) {
+  let v = tileViewCache.get(defId);
+  if (!v) {
+    const def = DEFS[defId];
+    v = { ...adaptTile(def), def, engineId: defId };
+    tileViewCache.set(defId, v);
+  }
+  return v;
+}
+
+// Zeichnet eine Kachel in normierte Koordinaten (der Cache setzt den
+// Transform und klippt bereits auf das Einheitsquadrat).
+function drawTileJob(ctx, job) {
+  const view = tileView(job.tileTypeId);
   ctx.save();
-  ctx.translate(ART_SIZE / 2, ART_SIZE / 2);
-  ctx.rotate(rot * Math.PI / 2);
-  ctx.translate(-ART_SIZE / 2, -ART_SIZE / 2);
-  ctx.scale(ART_SIZE, ART_SIZE);
-  paintTile(ctx, DEFS[defId], rot);
+  // Gedreht wird die Leinwand; die Layer arbeiten dadurch durchgehend im
+  // Koordinatensystem der Kartendefinition. canvasRot sagt dem Dekor, wie
+  // weit es gegendrehen muss, damit es aufrecht bleibt.
+  ctx.translate(0.5, 0.5);
+  ctx.rotate(job.rotation * Math.PI / 2);
+  ctx.translate(-0.5, -0.5);
+  renderTile(ctx, {
+    tile: { ...view, canvasRot: job.rotation },
+    variant: job.variant,
+    rotation: 0,
+    lod: job.lod,
+  });
   ctx.restore();
-  paintTileBorder(ctx, DEFS[defId], rot);
-  artCache.set(k, c);
-  return c;
+}
+
+/** Fertiges Bitmap für Motiv/Drehung/Stufe – rendert notfalls sofort. */
+export function tileArt(defId, rot = 0, lod = LOD.LARGE) {
+  const hit = tileCache.get(defId, 0, rot, lod);
+  if (hit) return hit;
+  tileCache.request(defId, 0, rot, lod, 100);
+  const budget = tileCache.budgetPerFrame;
+  tileCache.budgetPerFrame = 1;
+  const wasFrozen = tileCache.frozen;
+  tileCache.frozen = false;
+  tileCache.drainBudget(drawTileJob);
+  tileCache.budgetPerFrame = budget;
+  tileCache.frozen = wasFrozen;
+  return tileCache.get(defId, 0, rot, lod);
+}
+
+/**
+ * Bestes vorhandenes Bitmap; fehlt die Stufe, wird sie angefordert und
+ * solange eine gröbere gezeigt. Nur wenn gar nichts da ist, wird sofort
+ * gerendert – ein leeres Brett wäre schlimmer als ein kurzer Ruckler.
+ */
+function tileArtProgressive(defId, rot, lod) {
+  const fallback = LOD_ORDER.filter((l) => l !== lod)
+    .sort((a, b) => Math.abs(detailLevel(a) - detailLevel(lod)) - Math.abs(detailLevel(b) - detailLevel(lod)));
+  const best = tileCache.getBestAvailable(defId, 0, rot, lod, fallback);
+  if (best.canvas) {
+    if (!best.exact) tileCache.request(defId, 0, rot, lod, 5);
+    return best.canvas;
+  }
+  return tileArt(defId, rot, lod);
 }
 
 // Kachelrand ohne Raster: Ein gerichtetes Relief (hell oben/links, dunkel
@@ -115,23 +204,22 @@ export function tileArt(defId, rot) {
 // Flüssen die Anschlussbreite frei lässt.
 const BORDER_GAP = { R: 0.16, W: 0.2 };
 
-function paintTileBorder(ctx, d, rot) {
-  const s = ART_SIZE;
-  const inset = 0.75;
-  // Punkt auf der Kante (Endlage, also nach der Drehung) bei Anteil t
+function paintTileBorder(ctx, d) {
+  const w = hairline(ctx, 1);
+  const inset = w / 2;
+  // Punkt auf der Kante bei Anteil t (normierte Koordinaten)
   const at = (dir, t) => {
-    const p = t * s;
-    if (dir === 0) return [p, inset];
-    if (dir === 1) return [s - inset, p];
-    if (dir === 2) return [p, s - inset];
-    return [inset, p];
+    if (dir === 0) return [t, inset];
+    if (dir === 1) return [1 - inset, t];
+    if (dir === 2) return [t, 1 - inset];
+    return [inset, t];
   };
   ctx.save();
-  ctx.lineWidth = 1;
+  ctx.lineWidth = w;
   ctx.lineCap = 'butt';
   ctx.strokeStyle = 'rgba(52,34,16,0.3)';
   for (let dir = 0; dir < 4; dir++) {
-    const type = d.edges[(dir - rot + 4) % 4];
+    const type = d.edges[dir];
     if (type === 'C') continue;                   // Stadt: Mauer trägt die Kante
     const gap = BORDER_GAP[type] || 0;            // Straße/Fluss: Anschluss frei
     const spans = gap > 0
@@ -146,14 +234,6 @@ function paintTileBorder(ctx, d, rot) {
     }
   }
   ctx.restore();
-}
-
-// Seitentypen je Motiv – für den Kantenvertrag der Ackerparzellen
-const sidesCache = new Map();
-function sidesOf(d) {
-  let s = sidesCache.get(d.id);
-  if (!s) { s = adaptTile(d).sides; sidesCache.set(d.id, s); }
-  return s;
 }
 
 // Der Kantenvertrag kennt nur die Sperrzonen an den Kanten. Der Spiel-Renderer
@@ -182,29 +262,74 @@ function fieldAvoider(ctx, d) {
   };
 }
 
-function paintTile(ctx, d, rot = 0) {
-  const rnd = mulberry(hash(d.id));
-  paintGrass(ctx, rnd);
-  // Ackerparzellen direkt auf der Wiese; Wasser, Wege und Stadt decken sie
-  // später ab. Eigener Zufallsstrom, damit die übrigen Details unverändert
-  // bleiben.
+// ---------- Layer ----------
+// Die Reihenfolge steht in LAYER_ORDER (layers.js). Jeder Layer bekommt
+// seinen eigenen Zufallsstrom über rng.fork(name) – deshalb hier immer
+// rnd() aus dem übergebenen Strom und nirgends Math.random().
+const streamOf = (rng) => () => rng.next();
+
+registerLayer('meadow', (ctx, { tile, rng }) => {
+  paintGrass(ctx, streamOf(rng));
+});
+
+// fields.js registriert den Layer bereits mit dem Kantenvertrag. Der
+// Spiel-Renderer kennt zusätzlich die exakte Stadtfläche und die
+// Wahrzeichen und überschreibt die Registrierung deshalb hier.
+registerLayer('fields', (ctx, { tile, rng, lod }) => {
   drawFields(ctx, {
-    sides: sidesOf(d),
-    rnd: mulberry(hash(d.id + ':fields')),
-    detail: 2,
-    avoid: fieldAvoider(ctx, d),
+    sides: tile.sides,
+    rnd: streamOf(rng),
+    detail: detailLevel(lod),
+    avoid: fieldAvoider(ctx, tile.def),
   });
-  const busyness = d.f.filter(f => f.t !== 'field').length;
-  if (busyness <= 2) paintBushes(ctx, rnd, d);
+});
+
+registerLayer('ground', (ctx, { tile, rng, lod }) => {
+  const d = tile.def;
+  const busyness = d.f.filter((f) => f.t !== 'field').length;
+  if (busyness <= 2 && detailLevel(lod) > 0) paintBushes(ctx, streamOf(rng), d);
+}, { minLod: LOD.NORMAL });
+
+registerLayer('water', (ctx, { tile }) => {
+  const d = tile.def;
   for (const f of d.f) if (f.t === 'river') paintRiver(ctx, d, f);
+});
+
+registerLayer('roads', (ctx, { tile, rng }) => {
+  const d = tile.def;
   for (const f of d.f) if (f.t === 'road') paintRoad(ctx, d, f);
-  if (d.f.filter(f => f.t === 'road').length >= 3) paintPlaza(ctx, rnd);
-  for (const f of d.f) if (f.t === 'city') paintCity(ctx, d, f, rot);
-  for (const f of d.f) if (f.t === 'city') paintCityDeko(ctx, f, rot);
+  if (d.f.filter((f) => f.t === 'road').length >= 3) paintPlaza(ctx, streamOf(rng));
+});
+
+// Pflaster, Häuser und Mauer entstehen in einem Zug: die Häuser werden auf
+// die Stadtfläche geklippt, die Mauer liegt darüber. Ein Aufteilen auf die
+// Layer cityPaving / buildings / cityWall würde die Mauer unter die Häuser
+// schieben und die Silhouette an der Stadtkante aufbrechen.
+registerLayer('cityPaving', (ctx, { tile, rng }) => {
+  const d = tile.def;
+  for (const f of d.f) if (f.t === 'city') paintCity(ctx, d, f, tile.canvasRot, streamOf(rng));
+});
+
+registerLayer('landmarks', (ctx, { tile }) => {
+  const d = tile.def;
+  const rot = tile.canvasRot;
+  for (const f of d.f) if (f.t === 'city' && f.cath) paintCathedralAt(ctx, f, rot);
   for (const f of d.f) if (f.t === 'mon') paintMonastery(ctx, f, rot);
   for (const f of d.f) if (f.t === 'road' && f.inn) paintInn(ctx, f, rot);
-  paintFlowers(ctx, d, rnd);
-}
+});
+
+registerLayer('props', (ctx, { tile, rng }) => {
+  paintFlowers(ctx, tile.def, streamOf(rng));
+}, { minLod: LOD.NORMAL });
+
+registerLayer('coatOfArms', (ctx, { tile }) => {
+  const d = tile.def;
+  for (const f of d.f) if (f.t === 'city') paintShields(ctx, f, tile.canvasRot);
+});
+
+registerLayer('tileEdge', (ctx, { tile }) => {
+  paintTileBorder(ctx, tile.def);
+});
 
 // Dekor bleibt aufrecht, egal wie die Karte gedreht liegt
 function upright(ctx, x, y, rot, draw) {
@@ -488,9 +613,9 @@ function cityPaths(edges) {
 
 const ROOFS = ['#b5502e', '#a34627', '#c2662f', '#8f3d22', '#ad5a35', '#96482a'];
 
-function paintCity(ctx, d, f, rot = 0) {
+function paintCity(ctx, d, f, rot = 0, rnd = null) {
   const { region, walls } = cityPaths(f.e);
-  const rnd = mulberry(hash(d.id + ':' + f.e.join('')));
+  rnd = rnd || mulberry(hash(d.id + ':' + f.e.join('')));
   // Grundfläche: warmes Pflaster, flach (siehe paintGrass – kein Raster
   // über Kartengrenzen hinweg)
   ctx.fillStyle = '#c0925b';
@@ -679,9 +804,15 @@ function paintCathedral(ctx, x, y) {
   ctx.restore();
 }
 
-function paintCityDeko(ctx, f, rot = 0) {
+// Kathedrale zählt zu den Wahrzeichen, Wappen zum Layer coatOfArms –
+// deshalb getrennt und nicht mehr in einem gemeinsamen Dekor-Aufruf.
+function paintCathedralAt(ctx, f, rot = 0) {
   const [sx, sy] = f.spot;
-  if (f.cath) upright(ctx, sx, sy - 0.04, rot, () => paintCathedral(ctx, 0, 0));
+  upright(ctx, sx, sy - 0.04, rot, () => paintCathedral(ctx, 0, 0));
+}
+
+function paintShields(ctx, f, rot = 0) {
+  const [sx, sy] = f.spot;
   const s1x = f.cath ? sx - 0.3 : sx - (f.e.length > 1 ? 0.16 : 0.17);
   const s1y = f.cath ? sy : sy - (f.e.length === 1 ? 0.0 : 0.14);
   if (f.shield >= 1) upright(ctx, s1x, s1y, rot, () => paintShield(ctx, 0, 0, 0.058));
@@ -881,7 +1012,12 @@ export class BoardView {
     this.ctx = canvas.getContext('2d');
     this.cam = { x: 0, y: 0, scale: 90 };
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.lod = null;          // aktuelle Detailstufe, mit Hysterese
   }
+
+  /** Während einer Zoom-Geste nichts Neues rendern (Nachtrag §10.3). */
+  freezeCache() { tileCache.freeze(); }
+  thawCache() { tileCache.thaw(); }
 
   resize() {
     const r = this.canvas.getBoundingClientRect();
@@ -971,21 +1107,26 @@ export class BoardView {
       const [sx, sy] = this.worldToScreen(p.x, p.y);
       ctx.drawImage(sh, sx - 72 * shScale, sy - 72 * shScale, 144 * shScale, 144 * shScale);
     }
-    // Karten
+    // Karten – Detailstufe folgt der Bildschirmgröße, mit Hysterese
+    this.lod = lodFor(s * this.dpr, this.lod);
     for (const [, idx] of state.grid) {
       const p = state.placed[idx];
       const [sx, sy] = this.worldToScreen(p.x, p.y);
+      // außerhalb des Sichtfelds nichts anfordern
+      if (sx < -s || sy < -s || sx > r.width + s || sy > r.height + s) continue;
       let scale = 1;
       if (view.anim && view.anim.placedIdx === idx) {
         const t = Math.min(1, (now - view.anim.t0) / 260);
         scale = 1 + (1 - t) * 0.25;
         ctx.globalAlpha = 0.4 + 0.6 * t;
       }
-      const art = tileArt(p.defId, p.rot);
+      const art = tileArtProgressive(p.defId, p.rot, this.lod);
       const ds = s * scale;
       ctx.drawImage(art, sx - ds / 2, sy - ds / 2, ds, ds);
       ctx.globalAlpha = 1;
     }
+    // Nachgeforderte Stufen in kleinen Portionen nachziehen
+    tileCache.drainBudget(drawTileJob);
     // legale Felder: dezente, flache Markierung ohne Leuchten
     if (view.legal) {
       const m = s * 0.07;
@@ -1007,7 +1148,7 @@ export class BoardView {
       const { x, y, rot, valid } = view.sel;
       const [sx, sy] = this.worldToScreen(x, y);
       ctx.globalAlpha = 0.93;
-      const art = tileArt(view.sel.defId, rot);
+      const art = tileArtProgressive(view.sel.defId, rot, this.lod || LOD.NORMAL);
       ctx.drawImage(art, sx - s / 2, sy - s / 2, s, s);
       ctx.globalAlpha = 1;
       ctx.lineWidth = 2;
@@ -1084,7 +1225,7 @@ export function drawPreview(canvas, defId, rot) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!defId) return;
-  const art = tileArt(defId, rot);
+  const art = tileArt(defId, rot, LOD.LARGE);
   ctx.drawImage(art, 0, 0, canvas.width, canvas.height);
 }
 
