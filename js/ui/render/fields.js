@@ -10,11 +10,11 @@
  *   - Sperrzone 0,22 um Straßen-, Fluss- und Stadtkanten, zusätzlich 0,04 zur Straße
  *   - kein Versatz zur Kante hin (§11.3): Parzellen liegen ohnehin innen
  *
- * Gestaltung: Parzellen einer Kachel teilen eine Grundrichtung, wie echte
- * Flurstücke. Sie dürfen aneinandergrenzen und ergeben so ein Patchwork
- * statt verstreuter Rechtecke. Der Rand ist kein harter Strich, sondern ein
- * Feldrain aus Grasbüscheln – dadurch sitzt der Acker in der Wiese, statt
- * darauf zu liegen.
+ * Gestaltung (§4): jede Parzelle hat eine eigene Ausrichtung, benachbarte
+ * bewusst unterschiedlich gedreht; höchstens zwei Anbauarten je Kachel.
+ * Der Rand ist kein harter Strich, sondern ein Feldrain – an einer Seite
+ * eine Hecke oder Steinreihe, sonst Grasbüschel. Dadurch sitzt der Acker
+ * in der Wiese, statt darauf zu liegen.
  *
  * Die Zeichenfunktion ist renderer-neutral (normierte Koordinaten 0…1,
  * einfache Zufallsfunktion), damit der laufende Spiel-Renderer dieselbe
@@ -125,8 +125,16 @@ export function drawFields(ctx, { sides, rnd, detail = 1, avoid = null }) {
   const budget = parcelBudget(sides);
   if (budget === 0) return;
 
-  // Eine Grundrichtung für die ganze Kachel – Flurstücke laufen parallel.
-  const baseAngle = (rnd() - 0.5) * Math.PI;
+  // §4: jede Parzelle bekommt eine eigene Ausrichtung (0–180°), benachbarte
+  // bewusst unterschiedlich – mindestens MIN_ANGLE_GAP auseinander.
+  const MIN_ANGLE_GAP = 0.45;   // rund 26°
+
+  // §4: höchstens zwei verschiedene Zustände je Kachel, sonst wird es unruhig
+  const allowed = [pickCrop(rnd)];
+  for (let guard = 0; guard < 8 && allowed.length < 2; guard++) {
+    const c = pickCrop(rnd);
+    if (c !== allowed[0]) allowed.push(c);
+  }
 
   const parcels = [];
   for (let i = 0; i < budget; i++) {
@@ -139,12 +147,18 @@ export function drawFields(ctx, { sides, rnd, detail = 1, avoid = null }) {
       const r = Math.hypot(w, h) / 2;
       const x = 0.5 + (rnd() - 0.5) * 0.82;
       const y = 0.5 + (rnd() - 0.5) * 0.82;
-      const a = baseAngle + (rnd() - 0.5) * 0.28;
+      const a = rnd() * Math.PI;
       const corners = cornersOf(x, y, w, h, a);
       if (!parcelFits(corners, x, y, sides, avoid)) continue;
       // Dürfen aneinandergrenzen, aber nicht ineinanderliegen
       if (parcels.some((p) => Math.hypot(p.x - x, p.y - y) < (p.r + r) * 0.78)) continue;
-      parcels.push({ x, y, w, h, r, a, kind: pickCrop(rnd) });
+      // Nachbarn sollen sich in der Richtung unterscheiden
+      const tooSimilar = parcels.some((p) => {
+        const d = Math.abs(((p.a - a) % Math.PI + Math.PI) % Math.PI);
+        return Math.min(d, Math.PI - d) < MIN_ANGLE_GAP;
+      });
+      if (tooSimilar && attempt < 32) continue;
+      parcels.push({ x, y, w, h, r, a, kind: allowed[(rnd() * allowed.length) | 0] });
       break;
     }
   }
@@ -160,10 +174,10 @@ function drawParcel(ctx, p, rnd, detail) {
   // Handgezeichnet: Ecken leicht versetzt
   const j = (s) => (rnd() - 0.5) * s;
   const corners = [
-    [-hw + j(w * 0.13), -hh + j(h * 0.16)],
-    [hw + j(w * 0.13), -hh + j(h * 0.16)],
-    [hw + j(w * 0.13), hh + j(h * 0.16)],
-    [-hw + j(w * 0.13), hh + j(h * 0.16)],
+    [-hw + j(w * 0.08), -hh + j(h * 0.08)],
+    [hw + j(w * 0.08), -hh + j(h * 0.08)],
+    [hw + j(w * 0.08), hh + j(h * 0.08)],
+    [-hw + j(w * 0.08), hh + j(h * 0.08)],
   ];
 
   ctx.save();
@@ -191,51 +205,111 @@ function drawParcel(ctx, p, rnd, detail) {
   ctx.strokeStyle = withAlpha(shade(color, -0.3), 0.35);
   ctx.stroke(path);
 
-  if (detail > 0) paintHedgerow(ctx, corners, rnd);
+  if (detail > 0) {
+    paintHedgerow(ctx, corners, rnd);
+    if (rnd() < 0.25) paintStraw(ctx, corners, rnd);
+  }
   ctx.restore();
 }
 
-/** Grasbüschel entlang der Parzellenkante – bricht die gerade Silhouette. */
+/**
+ * Feldrain (§4): an genau einer Seite eine Hecke oder eine Steinreihe,
+ * an den übrigen nur vereinzelte Grasbüschel. Eine Hecke ringsum sähe aus
+ * wie ein Zaun und nähme der Parzelle die Zugehörigkeit zur Wiese.
+ */
 function paintHedgerow(ctx, corners, rnd) {
-  ctx.lineWidth = 0.006;
+  const hedgeSide = (rnd() * 4) | 0;
+  const stones = rnd() < 0.35;      // Steinreihe statt Hecke
   ctx.lineCap = 'round';
   for (let i = 0; i < 4; i++) {
     const [ax, ay] = corners[i];
     const [bx, by] = corners[(i + 1) % 4];
-    const len = Math.hypot(bx - ax, by - ay);
-    const steps = Math.max(2, Math.round(len / 0.035));
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const nx = (by - ay) / len, ny = -(bx - ax) / len;
+
+    if (i === hedgeSide) {
+      const steps = Math.max(3, Math.round(len / 0.022));
+      for (let s = 0; s <= steps; s++) {
+        const t = (s + (rnd() - 0.5) * 0.4) / steps;
+        const px = ax + (bx - ax) * t + nx * 0.006;
+        const py = ay + (by - ay) * t + ny * 0.006;
+        if (stones) {
+          ctx.beginPath();
+          ctx.arc(px, py, 0.006 + rnd() * 0.005, 0, Math.PI * 2);
+          ctx.fillStyle = withAlpha(PALETTE.wallStone, 0.85);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(px + 0.002, py + 0.002, 0.003, 0, Math.PI * 2);
+          ctx.fillStyle = withAlpha(PALETTE.wallShadow, 0.5);
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.arc(px, py, 0.010 + rnd() * 0.007, 0, Math.PI * 2);
+          ctx.fillStyle = withAlpha(rnd() > 0.4 ? PALETTE.meadowDark : PALETTE.meadow, 0.9);
+          ctx.fill();
+        }
+      }
+      continue;
+    }
+
+    ctx.lineWidth = 0.006;
+    const steps = Math.max(2, Math.round(len / 0.05));
     for (let s = 0; s < steps; s++) {
-      if (rnd() < 0.35) continue;
+      if (rnd() < 0.5) continue;
       const t = (s + 0.5 + (rnd() - 0.5) * 0.6) / steps;
       const px = ax + (bx - ax) * t;
       const py = ay + (by - ay) * t;
-      // Normale nach außen
-      const nx = (by - ay) / len, ny = -(bx - ax) / len;
-      const out = 0.012 + rnd() * 0.010;
-      ctx.strokeStyle = withAlpha(rnd() > 0.5 ? PALETTE.meadowDark : PALETTE.meadowLight, 0.75);
+      const out = 0.010 + rnd() * 0.008;
+      ctx.strokeStyle = withAlpha(rnd() > 0.5 ? PALETTE.meadowDark : PALETTE.meadowLight, 0.7);
       ctx.beginPath();
       ctx.moveTo(px, py);
-      ctx.lineTo(px + nx * out * (rnd() > 0.5 ? 1 : -1), py + ny * out);
+      ctx.lineTo(px + nx * out, py + ny * out);
       ctx.stroke();
     }
   }
 }
 
+/** Strohballen an einer Parzellenecke (§4, P = 0,25). */
+function paintStraw(ctx, corners, rnd) {
+  const c = corners[(rnd() * 4) | 0];
+  const n = 2 + ((rnd() * 2) | 0);
+  for (let i = 0; i < n; i++) {
+    const bx = c[0] + (rnd() - 0.5) * 0.05;
+    const by = c[1] + (rnd() - 0.5) * 0.05;
+    const rw = 0.016 + rnd() * 0.006;
+    ctx.beginPath();
+    ctx.ellipse(bx + 0.004, by + rw * 0.7, rw * 1.1, rw * 0.35, 0, 0, Math.PI * 2);
+    ctx.fillStyle = withAlpha(PALETTE.shadow, 0.3);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(bx, by, rw, 0, Math.PI * 2);
+    ctx.fillStyle = PALETTE.fieldGrain;
+    ctx.fill();
+    ctx.lineWidth = 0.004;
+    ctx.strokeStyle = withAlpha(shade(PALETTE.fieldGrain, -0.35), 0.8);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(bx, by, rw * 0.45, 0, Math.PI * 2);
+    ctx.strokeStyle = withAlpha(shade(PALETTE.fieldGrain, -0.25), 0.7);
+    ctx.stroke();
+  }
+}
+
 function paintTexture(ctx, kind, hw, hh, rnd, detail) {
   if (kind === 'plowed') {
-    // Pflugfurchen längs, mit leichter Welle
-    const step = detail > 1 ? 0.018 : 0.026;
-    ctx.lineWidth = 0.007;
+    // Pflugfurchen längs (§4: Abstand 0,012, Deckkraft 15 %)
+    const step = detail > 1 ? 0.012 : 0.024;
+    ctx.lineWidth = 0.006;
     for (let fy = -hh; fy <= hh; fy += step) {
-      ctx.strokeStyle = withAlpha(shade(PALETTE.fieldPlowed, -0.32), 0.55);
+      ctx.strokeStyle = withAlpha(shade(PALETTE.fieldPlowed, -0.32), 0.15);
       ctx.beginPath();
       ctx.moveTo(-hw, fy);
       ctx.quadraticCurveTo(0, fy + (rnd() - 0.5) * 0.012, hw, fy);
       ctx.stroke();
-      ctx.strokeStyle = withAlpha(shade(PALETTE.fieldPlowed, 0.22), 0.4);
+      ctx.strokeStyle = withAlpha(shade(PALETTE.fieldPlowed, 0.22), 0.15);
       ctx.beginPath();
-      ctx.moveTo(-hw, fy + step * 0.42);
-      ctx.quadraticCurveTo(0, fy + step * 0.42 + (rnd() - 0.5) * 0.01, hw, fy + step * 0.42);
+      ctx.moveTo(-hw, fy + step * 0.5);
+      ctx.quadraticCurveTo(0, fy + step * 0.5 + (rnd() - 0.5) * 0.01, hw, fy + step * 0.5);
       ctx.stroke();
     }
   } else if (kind === 'grain') {

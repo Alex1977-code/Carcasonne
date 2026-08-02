@@ -9,6 +9,7 @@ import { find } from '../engine/game.js';
 import { drawFields } from './render/fields.js';
 import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
+import { drawTown } from './render/buildings.js';
 import { registerLayer, renderTile } from './render/layers.js';
 import { TileCache } from './render/cache.js';
 import { LOD, LOD_ORDER, lodFor, renderSizeFor, detailLevel, hairline, EDGE } from './render/contract.js';
@@ -322,9 +323,9 @@ registerLayer('roads', (ctx, { tile, rng }) => {
 // die Stadtfläche geklippt, die Mauer liegt darüber. Ein Aufteilen auf die
 // Layer cityPaving / buildings / cityWall würde die Mauer unter die Häuser
 // schieben und die Silhouette an der Stadtkante aufbrechen.
-registerLayer('cityPaving', (ctx, { tile, rng }) => {
+registerLayer('cityPaving', (ctx, { tile, rng, lod }) => {
   const d = tile.def;
-  for (const f of d.f) if (f.t === 'city') paintCity(ctx, d, f, tile.canvasRot, streamOf(rng));
+  for (const f of d.f) if (f.t === 'city') paintCity(ctx, d, f, tile.canvasRot, streamOf(rng), detailLevel(lod));
 });
 
 registerLayer('landmarks', (ctx, { tile }) => {
@@ -369,7 +370,7 @@ function paintGrass(ctx, rnd) {
     const x = rnd(), y = rnd(), r = 0.12 + rnd() * 0.22;
     const p = ctx.createRadialGradient(x, y, 0, x, y, r);
     const dark = rnd() > 0.5;
-    p.addColorStop(0, dark ? 'rgba(48,88,28,0.13)' : 'rgba(215,235,150,0.12)');
+    p.addColorStop(0, dark ? 'rgba(48,88,28,0.09)' : 'rgba(215,235,150,0.08)');
     p.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = p;
     ctx.fillRect(x - r, y - r, r * 2, r * 2);
@@ -379,7 +380,7 @@ function paintGrass(ctx, rnd) {
   ctx.lineCap = 'round';
   for (let i = 0; i < 26; i++) {
     const x = 0.03 + rnd() * 0.94, y = 0.04 + rnd() * 0.94;
-    ctx.strokeStyle = rnd() > 0.5 ? 'rgba(35,70,20,0.20)' : 'rgba(220,240,170,0.28)';
+    ctx.strokeStyle = rnd() > 0.5 ? 'rgba(35,70,20,0.13)' : 'rgba(220,240,170,0.19)';
     for (let b = -1; b <= 1; b++) {
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -390,7 +391,7 @@ function paintGrass(ctx, rnd) {
   // feine Körnung
   for (let i = 0; i < 46; i++) {
     const x = rnd(), y = rnd();
-    ctx.fillStyle = rnd() > 0.5 ? 'rgba(255,255,220,0.06)' : 'rgba(20,50,10,0.07)';
+    ctx.fillStyle = rnd() > 0.5 ? 'rgba(255,255,220,0.04)' : 'rgba(20,50,10,0.05)';
     ctx.fillRect(x, y, 0.012, 0.012);
   }
 }
@@ -634,7 +635,7 @@ function cityPaths(edges) {
 
 const ROOFS = ['#b5502e', '#a34627', '#c2662f', '#8f3d22', '#ad5a35', '#96482a'];
 
-function paintCity(ctx, d, f, rot, rnd) {
+function paintCity(ctx, d, f, rot, rnd, detail = 2) {
   const { region, walls } = cityPaths(f.e);
   // Grundfläche: warmes Pflaster, flach (siehe paintGrass – kein Raster
   // über Kartengrenzen hinweg)
@@ -648,28 +649,40 @@ function paintCity(ctx, d, f, rot, rnd) {
     ctx.fillStyle = rnd() > 0.5 ? 'rgba(255,235,200,0.10)' : 'rgba(90,50,20,0.10)';
     ctx.fillRect(x, y, 0.014, 0.014);
   }
-  // Häuser einstreuen (nur wo wirklich Stadtfläche ist).
+  // Dorf statt Streumuster: Gassennetz, Reihenbebauung, Höfe (§3).
   // isPointInPath erwartet Geräte-Koordinaten → von Hand transformieren.
   const M = ctx.getTransform();
   const inside = (x, y) => {
     const pt = M.transformPoint(new DOMPoint(x, y));
     return ctx.isPointInPath(region, pt.x, pt.y);
   };
-  const houses = [];
-  for (let i = 0; i < 48 && houses.length < 11; i++) {
-    const w = 0.1 + rnd() * 0.05;
-    const h = w * (0.75 + rnd() * 0.3);
-    const x = 0.03 + rnd() * 0.94, y = 0.06 + rnd() * 0.9;
-    const r = Math.max(w * 0.68, h * 0.62);
-    if (inside(x, y) &&
-        inside(x - r, y - r) && inside(x + r, y - r) &&
-        inside(x - r, y + r) && inside(x + r, y + r) &&
-        !houses.some(o => Math.abs(o.x - x) < (o.w + w) * 0.66 && Math.abs(o.y - y) < (o.h + h) * 0.66)) {
-      houses.push({ x, y, w, h, roof: ROOFS[(rnd() * ROOFS.length) | 0] });
-    }
-  }
-  houses.sort((a, b) => a.y - b.y);
-  for (const hs of houses) upright(ctx, hs.x, hs.y, rot, () => paintHouse(ctx, hs));
+  // Randreihe darf bis 0.02 an eine durchgehende Stadtkante (§3 A2), damit
+  // zusammengesetzte Städte verschmelzen. Umgesetzt als Toleranz: außerhalb
+  // der Fläche zählt ein Punkt noch, wenn er dicht an einer Stadtkante liegt.
+  const cityEdge = new Set(f.e);
+  const edgeInside = (x, y) => {
+    if (inside(x, y)) return true;
+    const near = [[0, y <= 0.02], [1, x >= 0.98], [2, y >= 0.98], [3, x <= 0.02]];
+    return near.some(([side, hit]) => hit && cityEdge.has(side));
+  };
+  // Das Dorf wird aufrecht gebaut – die Kachel ist gedreht, die Häuser nicht.
+  ctx.save();
+  ctx.translate(0.5, 0.5);
+  ctx.rotate(-rot * Math.PI / 2);
+  ctx.translate(-0.5, -0.5);
+  const toTown = (x, y) => rotPoint([x, y], rot);
+  drawTown(ctx, {
+    inside: (x, y) => { const [px, py] = toTown(x, y); return inside(px, py); },
+    edgeInside: (x, y) => { const [px, py] = toTown(x, y); return edgeInside(px, py); },
+    rnd,
+    detail,
+    opts: {
+      fortified: f.shield > 0 || d.f.some((o) => o.t === 'road'),
+      largeCity: f.e.length >= 3,
+      maxHouses: f.e.length >= 3 ? 16 : f.e.length === 2 ? 12 : 9,
+    },
+  });
+  ctx.restore();
   ctx.restore();
   // Stadtmauer mit Zinnen
   if (walls) {
