@@ -10,10 +10,22 @@ import { chooseMove } from '../engine/ai.js';
 import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld } from './render.js';
 import { sfx, applySoundOptions, unlockAudio, startMusic, stopMusic, soundState } from './sound.js';
 import { Net } from './net.js';
+import { PLAYER_HEXES, PLAYER_NAMES } from './render/meeple-colors.js';
 
 const $ = (id) => document.getElementById(id);
-const COLORS = ['#e63946', '#2f7bdb', '#f4c430', '#3fa34d', '#454554', '#8e44ad'];
-const COLOR_NAMES = ['Rot', 'Blau', 'Gelb', 'Grün', 'Schwarz', 'Lila'];
+// Spielerfarben aus der geprüften Palette (siehe js/ui/render/meeple-colors.js):
+// maximaler kleinster CIELAB-Abstand über normales Sehen, Deuteranopie und
+// Protanopie. Reihenfolge wie bisher, damit alte Spielstände dieselbe Farbe
+// behalten; Grau ist als siebte Wahl dazugekommen.
+const COLORS = PLAYER_HEXES;
+const COLOR_NAMES = PLAYER_NAMES;
+
+// Farben der Vorgängerversion → Position in der neuen Palette
+const LEGACY_COLORS = ['#e63946', '#2f7bdb', '#f4c430', '#3fa34d', '#454554', '#8e44ad'];
+function migrateColor(hex) {
+  const i = LEGACY_COLORS.indexOf(String(hex).toLowerCase());
+  return i >= 0 ? COLORS[i] : hex;
+}
 const DEFAULT_NAMES = ['Anna', 'Ben', 'Clara', 'David', 'Emma', 'Felix'];
 
 // ---------- Speicher ----------
@@ -65,6 +77,9 @@ $('btnContinue').addEventListener('click', () => {
   sfx.click();
   const save = store.get('save', null);
   if (!save) return;
+  if (save.settings && Array.isArray(save.settings.players)) {
+    for (const p of save.settings.players) p.color = migrateColor(p.color);
+  }
   const s = resumeGame(save);
   if (!s || s.phase === 'over') { store.del('save'); refreshMenu(); return; }
   startGameUI(s);
@@ -137,7 +152,7 @@ function renderPlayerRows() {
       sfx.click();
       const used = setup.players.map(q => q.color);
       let c = p.color;
-      for (let k = 0; k < 6; k++) {
+      for (let k = 0; k < COLORS.length; k++) {
         c = (c + 1) % COLORS.length;
         if (!used.includes(c)) break;
       }
@@ -214,7 +229,7 @@ $('btnAddPlayer').addEventListener('click', () => {
   const n = setup.players.length;
   setup.players.push({
     name: DEFAULT_NAMES[n % DEFAULT_NAMES.length],
-    color: color < 0 ? n % 6 : color,
+    color: color < 0 ? n % COLORS.length : color,
     type: 'ai2',
   });
   renderPlayerRows();
@@ -825,6 +840,7 @@ bc.addEventListener('pointermove', (e) => {
     }
   } else if (pointers.size === 2 && pinchStart) {
     moved = true;
+    board.freezeCache();
     const [a, b] = [...pointers.values()];
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
     const ns = Math.min(200, Math.max(14, pinchStart.scale * dist / pinchStart.dist));
@@ -835,7 +851,7 @@ bc.addEventListener('pointermove', (e) => {
 function pointerEnd(e) {
   const wasSingle = pointers.size === 1;
   pointers.delete(e.pointerId);
-  if (pointers.size < 2) pinchStart = null;
+  if (pointers.size < 2) { pinchStart = null; board.thawCache(); }
   if (pointers.size === 1) {
     const [a] = [...pointers.values()];
     dragStart = { x: a.x, y: a.y, camX: board.cam.x, camY: board.cam.y };

@@ -111,9 +111,13 @@ Die Kacheldaten kommen dabei nicht aus einer zweiten Liste, sondern über
 `validateTiles()` darüber laufen. `docs/SPEC-NACHTRAG.md` beschreibt die
 Regeln, die dabei gelten.
 
-Der Layer `fields` (Ackerparzellen) liegt in `js/ui/render/fields.js` und wird
-von beiden Renderern genutzt: der Prüfstand registriert ihn als Layer, der
-Spiel-Renderer ruft dieselbe Zeichenfunktion auf. Die Parzellen halten den
+Der Spiel-Renderer zeichnet über dieselbe Layer-Registry: die Reihenfolge
+steht in `js/ui/render/layers.js` (`LAYER_ORDER`), jeder Layer bekommt einen
+eigenen Zufallsstrom, und der Kachel-Cache hält Motiv × Drehung × Detailstufe
+mit Obergrenze für Anzahl **und** Speicher. Der Layer `fields`
+(Ackerparzellen) liegt in `js/ui/render/fields.js` und wird von beiden
+Renderern genutzt: der Prüfstand registriert ihn als Layer, der
+Spiel-Renderer registriert ihn mit dem genaueren Ausschluss neu. Die Parzellen halten den
 Kantenvertrag ein – 0,05 Wiesenstreifen zum Kachelrand, Sperrzonen an
 Straßen-, Fluss- und Stadtkanten – und meiden im Spiel zusätzlich die exakte
 Stadtfläche und die Wahrzeichen.

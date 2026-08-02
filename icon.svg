@@ -5,8 +5,8 @@
       <stop offset="1" stop-color="#699d40"/>
     </linearGradient>
     <linearGradient id="mp" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#f0533f"/>
-      <stop offset="1" stop-color="#c22f21"/>
+      <stop offset="0" stop-color="#E8492E"/>
+      <stop offset="1" stop-color="#B02614"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="96" fill="url(#bg)"/>
@@ -14,7 +14,7 @@
   <path d="M32 32 h448 v60 q-224 130 -448 0 Z" fill="#c98a56" stroke="#5f3a1e" stroke-width="10"/>
   <path d="M32 480 q160 -60 240 0 q120 40 208 -30 v30 q0 0 0 0 h-448 Z" fill="#e8dbb6" opacity="0.9"/>
   <g transform="translate(256,290) scale(3.1)">
-    <path transform="translate(-50,-50)" fill="url(#mp)" stroke="#571910" stroke-width="5"
+    <path transform="translate(-50,-50)" fill="url(#mp)" stroke="#67190C" stroke-width="5"
       d="M50 6 C60 6 67 14 67 23 C67 29 64 33 61 36 C74 41 86 50 92 61 C95 67 91 72 85 72 L67 72 C70 82 75 90 81 96 C81 98 79 99 76 99 L59 99 C56 99 54 97 53 94 Q50 84 47 94 C46 97 44 99 41 99 L24 99 C21 99 19 98 19 96 C25 90 30 82 33 72 L15 72 C9 72 5 67 8 61 C14 50 26 41 39 36 C36 33 33 29 33 23 C33 14 40 6 50 6 Z"/>
     <circle cx="-8" cy="-38" r="7" fill="#ffffff" opacity="0.45"/>
   </g>
