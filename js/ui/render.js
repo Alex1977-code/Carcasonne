@@ -8,6 +8,7 @@ import { DEFS } from '../engine/tiles.js';
 import { find } from '../engine/game.js';
 import { drawFields } from './render/fields.js';
 import { adaptTile } from './render/adapt-tiles.js';
+import { meepleRings } from './render/meeple-colors.js';
 
 // ---------- Hilfen ----------
 function mulberry(seed) {
@@ -66,8 +67,16 @@ export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true 
   g.addColorStop(1, shade(color, -0.3));
   ctx.fillStyle = g;
   ctx.fill(MEEPLE_PATH);
-  ctx.lineWidth = 4.5;
-  ctx.strokeStyle = shade(color, -0.55);
+  // Trennring in zwei Lagen: außen der Halo gegen den Untergrund, innen die
+  // Kontur gegen die Füllfarbe. Eine einzelne Ringfarbe kann auf zweitonigen
+  // Flächen wie der Straße nicht gegen beide Töne bestehen.
+  const rings = meepleRings(color);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = rings.outer;
+  ctx.stroke(MEEPLE_PATH);
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = rings.inner;
   ctx.stroke(MEEPLE_PATH);
   ctx.beginPath();
   ctx.ellipse(43, 21, 9, 6, -0.5, 0, Math.PI * 2);
