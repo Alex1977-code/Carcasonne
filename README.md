@@ -85,6 +85,7 @@ Struktur:
 | `js/ui/main.js` | Bildschirme, Touch-Steuerung, Spielablauf, Speicher |
 | `js/lib/peerjs.min.js` | PeerJS-Bibliothek (MIT-Lizenz, eingebettet) |
 | `js/ui/render/` | Renderer-Fundament: Zufall, Kantenvertrag, Palette, Layer, Cache |
+| `js/ui/render/fields.js` | Ackerparzellen – von beiden Renderern genutzt |
 | `js/ui/render/adapt-tiles.js` | Adapter Engine-Motive → Renderer-Schema |
 | `debug/gallery.html` | Prüfstand für die Kachelgrafik |
 | `tests/` | Tests (Node, ohne Abhängigkeiten) |
@@ -109,3 +110,10 @@ Die Kacheldaten kommen dabei nicht aus einer zweiten Liste, sondern über
 `node tests/tiles-schema.test.mjs` prüft die Übersetzung und lässt
 `validateTiles()` darüber laufen. `docs/SPEC-NACHTRAG.md` beschreibt die
 Regeln, die dabei gelten.
+
+Der Layer `fields` (Ackerparzellen) liegt in `js/ui/render/fields.js` und wird
+von beiden Renderern genutzt: der Prüfstand registriert ihn als Layer, der
+Spiel-Renderer ruft dieselbe Zeichenfunktion auf. Die Parzellen halten den
+Kantenvertrag ein – 0,05 Wiesenstreifen zum Kachelrand, Sperrzonen an
+Straßen-, Fluss- und Stadtkanten – und meiden im Spiel zusätzlich die exakte
+Stadtfläche und die Wahrzeichen.

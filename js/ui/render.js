@@ -6,6 +6,8 @@
 // ============================================================
 import { DEFS } from '../engine/tiles.js';
 import { find } from '../engine/game.js';
+import { drawFields } from './render/fields.js';
+import { adaptTile } from './render/adapt-tiles.js';
 
 // ---------- Hilfen ----------
 function mulberry(seed) {
@@ -137,9 +139,52 @@ function paintTileBorder(ctx, d, rot) {
   ctx.restore();
 }
 
+// Seitentypen je Motiv – für den Kantenvertrag der Ackerparzellen
+const sidesCache = new Map();
+function sidesOf(d) {
+  let s = sidesCache.get(d.id);
+  if (!s) { s = adaptTile(d).sides; sidesCache.set(d.id, s); }
+  return s;
+}
+
+// Der Kantenvertrag kennt nur die Sperrzonen an den Kanten. Der Spiel-Renderer
+// weiß genauer, wo Stadtfläche und Wahrzeichen liegen – dieser Ausschluss
+// verhindert Äcker, die halb unter der Stadtmauer oder dem Kloster hervorsehen.
+function fieldAvoider(ctx, d) {
+  const regions = d.f.filter((f) => f.t === 'city').map((f) => cityPaths(f.e).region);
+  const spots = [];
+  for (const f of d.f) {
+    if (f.t === 'mon') spots.push({ x: f.spot[0], y: f.spot[1], r: 0.34 });
+    if (f.t === 'road' && f.inn) {
+      spots.push({ x: Math.min(0.8, f.spot[0] + 0.17), y: Math.max(0.2, f.spot[1] - 0.15), r: 0.2 });
+    }
+  }
+  if (!regions.length && !spots.length) return null;
+  const M = ctx.getTransform();
+  const inCity = (x, y) => {
+    if (!regions.length) return false;
+    const pt = M.transformPoint(new DOMPoint(x, y));
+    return regions.some((rg) => ctx.isPointInPath(rg, pt.x, pt.y));
+  };
+  return (x, y, r) => {
+    const probes = [[0, 0], [-r, -r], [r, -r], [-r, r], [r, r], [0, -r], [0, r], [-r, 0], [r, 0]];
+    for (const [dx, dy] of probes) if (inCity(x + dx, y + dy)) return true;
+    return spots.some((s) => Math.hypot(s.x - x, s.y - y) < s.r + r);
+  };
+}
+
 function paintTile(ctx, d, rot = 0) {
   const rnd = mulberry(hash(d.id));
   paintGrass(ctx, rnd);
+  // Ackerparzellen direkt auf der Wiese; Wasser, Wege und Stadt decken sie
+  // später ab. Eigener Zufallsstrom, damit die übrigen Details unverändert
+  // bleiben.
+  drawFields(ctx, {
+    sides: sidesOf(d),
+    rnd: mulberry(hash(d.id + ':fields')),
+    detail: 2,
+    avoid: fieldAvoider(ctx, d),
+  });
   const busyness = d.f.filter(f => f.t !== 'field').length;
   if (busyness <= 2) paintBushes(ctx, rnd, d);
   for (const f of d.f) if (f.t === 'river') paintRiver(ctx, d, f);
