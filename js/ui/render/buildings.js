@@ -176,6 +176,7 @@ function placeHouses(alleys, inside, edgeInside, rnd, opts) {
   const courtyards = opts.courtyards;
 
   const free = (x, y, r) => {
+    if (opts.reserved && Math.hypot(opts.reserved.x - x, opts.reserved.y - y) < opts.reserved.r) return false;
     for (const c of courtyards) if (Math.hypot(c.x - x, c.y - y) < c.r + r * 0.5) return false;
     for (const h of houses) {
       // Reihenbebauung: bis zu 10 % Überlappung erlaubt (§3 A2)
@@ -187,7 +188,7 @@ function placeHouses(alleys, inside, edgeInside, rnd, opts) {
 
   const add = (x, y, ang, row, sizeCap) => {
     const c = pickKind(rnd, used, opts);
-    const scale = (0.8 + rnd() * 0.6) * (sizeCap || 1);
+    const scale = (0.8 + rnd() * 0.6) * (sizeCap || 1) * (opts.houseScale || 1);
     // Firstrichtung 0° oder 90° zur Gassenachse. Gebäude werden als
     // aufrechte Ansicht gezeichnet – die Firstrichtung zeigt sich darin,
     // ob man die Traufseite (breit) oder den Giebel (schmal) sieht, nicht
@@ -290,10 +291,16 @@ export function drawTown(ctx, { inside, edgeInside, rnd, detail = 2, opts = {} }
     fortified: !!opts.fortified,
     largeCity: !!opts.largeCity,
     maxHouses: opts.maxHouses || 14,
+    houseScale: opts.houseScale || 1,
+    reserved: opts.reserved || null,
   };
   // Abstand zur Stadtmauer: sonst lugen Gassen und Häuser durch die
   // Zinnenlücken und die Mauer verliert ihre Silhouette.
-  const core = erode(inside, WALL_MARGIN);
+  let core = erode(inside, WALL_MARGIN);
+  if (settings.reserved) {
+    const base = core, rv = settings.reserved;
+    core = (x, y) => base(x, y) && Math.hypot(rv.x - x, rv.y - y) > rv.r;
+  }
   const alleys = makeAlleys(core, rnd);
   const courtyards = makeCourtyards(core, rnd);
   paintAlleys(ctx, alleys, detail, rnd);
@@ -646,13 +653,19 @@ function paintCourtyard(ctx, c, rnd, detail) {
     ctx.beginPath();
     ctx.moveTo(-0.036, -0.006); ctx.lineTo(0, -0.03); ctx.lineTo(0.036, -0.006);
     ctx.closePath(); ctx.fill();
-  } else if (c.kind === 2) {                // Karren
-    shadow(0.026, 0.018);
-    ctx.fillStyle = shade(PALETTE.timber, 0.25);
-    ctx.fillRect(-0.028, -0.012, 0.056, 0.018);
-    ctx.fillStyle = shade(PALETTE.timber, -0.3);
-    for (const wx of [-0.016, 0.016]) {
-      ctx.beginPath(); ctx.arc(wx, 0.008, 0.009, 0, Math.PI * 2); ctx.fill();
+  } else if (c.kind === 2) {                // Karren mit Deichsel
+    shadow(0.026, 0.02);
+    ctx.strokeStyle = shade(PALETTE.timber, 0.1);
+    ctx.lineWidth = 0.005;
+    ctx.beginPath(); ctx.moveTo(0.026, -0.004); ctx.lineTo(0.044, 0.004); ctx.stroke();
+    ctx.fillStyle = shade(PALETTE.timber, 0.3);
+    ctx.fillRect(-0.03, -0.018, 0.058, 0.016);
+    ctx.fillStyle = withAlpha(PALETTE.fieldGrain, 0.9);
+    ctx.fillRect(-0.026, -0.026, 0.05, 0.01);
+    ctx.strokeStyle = shade(PALETTE.timber, -0.35);
+    ctx.lineWidth = 0.004;
+    for (const wx of [-0.017, 0.014]) {
+      ctx.beginPath(); ctx.arc(wx, 0.006, 0.009, 0, Math.PI * 2); ctx.stroke();
     }
   } else {                                  // Baum
     shadow(0.028, 0.022);

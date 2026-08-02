@@ -9,7 +9,9 @@ import { find } from '../engine/game.js';
 import { drawFields } from './render/fields.js';
 import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
+import { PALETTE, shade as pshade, withAlpha } from './render/palette.js';
 import { drawTown } from './render/buildings.js';
+import { drawMonastery, drawCathedral } from './render/landmarks.js';
 import { registerLayer, renderTile } from './render/layers.js';
 import { TileCache } from './render/cache.js';
 import { LOD, LOD_ORDER, lodFor, renderSizeFor, detailLevel, hairline, EDGE } from './render/contract.js';
@@ -47,11 +49,42 @@ function shade(hex, f) {
 const EDGE_MID = [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]];
 
 // ---------- Meeple ----------
+// §6: ein geschlossener Pfad aus Bézier-Kurven, kein Rechteck, keine harte
+// Ecke. Kopf r ≈ 0,17 der Höhe, Halsübergang tangential (kein Einschnitt),
+// Arme als konvexe Bögen mit runden Enden, Beinzwischenraum als U mit
+// Radius statt V-Kerbe, Fußlinie leicht nach außen gewölbt.
+// Koordinatensystem 0…100, Figurenhöhe 100.
 const MEEPLE_PATH = new Path2D(
-  'M50 6 C60 6 67 14 67 23 C67 29 64 33 61 36 C74 41 86 50 92 61 C95 67 91 72 85 72 ' +
-  'L67 72 C70 82 75 90 81 96 C81 98 79 99 76 99 L59 99 C56 99 54 97 53 94 ' +
-  'Q50 84 47 94 C46 97 44 99 41 99 L24 99 C21 99 19 98 19 96 C25 90 30 82 33 72 ' +
-  'L15 72 C9 72 5 67 8 61 C14 50 26 41 39 36 C36 33 33 29 33 23 C33 14 40 6 50 6 Z'
+  // Kopf: Kreis r = 17 um (50, 23), tangential in die Schulter auslaufend
+  'M50 6 ' +
+  'C59.4 6 67 13.6 67 23 ' +
+  'C67 29.6 63.2 35.3 57.7 38.1 ' +
+  // rechte Schulter, tangential angesetzt
+  'C64.6 40.3 71.2 44.1 77.4 49.4 ' +
+  // rechter Arm: konvexer Bogen mit rundem Ende
+  'C85.6 56.4 90.6 62.1 92.4 66.5 ' +
+  'C94.4 71.4 91.4 75.4 86.6 74.6 ' +
+  'C81.2 73.7 74.6 70.6 68.4 66.2 ' +
+  // Übergang zur Hüfte
+  'C69.6 76.4 72.6 86.4 77.3 94.4 ' +
+  'C79.1 97.5 77.4 99.6 74.2 99.6 ' +
+  'L60.2 99.6 ' +
+  'C57.2 99.6 55.3 97.9 54.7 94.9 ' +
+  // Beinzwischenraum: U-Form mit Radius, keine V-Kerbe
+  'C53.9 90.9 52.4 88.4 50 88.4 ' +
+  'C47.6 88.4 46.1 90.9 45.3 94.9 ' +
+  'C44.7 97.9 42.8 99.6 39.8 99.6 ' +
+  'L25.8 99.6 ' +
+  'C22.6 99.6 20.9 97.5 22.7 94.4 ' +
+  'C27.4 86.4 30.4 76.4 31.6 66.2 ' +
+  // linker Arm
+  'C25.4 70.6 18.8 73.7 13.4 74.6 ' +
+  'C8.6 75.4 5.6 71.4 7.6 66.5 ' +
+  'C9.4 62.1 14.4 56.4 22.6 49.4 ' +
+  'C28.8 44.1 35.4 40.3 42.3 38.1 ' +
+  // linke Schulter zurück in den Kopf, tangential
+  'C36.8 35.3 33 29.6 33 23 ' +
+  'C33 13.6 40.6 6 50 6 Z'
 );
 
 export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true } = {}) {
@@ -59,34 +92,50 @@ export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true 
   ctx.save();
   ctx.translate(x - s / 2, y - s / 2);
   ctx.scale(s / 100, s / 100);
+
+  // Kontaktschatten: flache Ellipse direkt unter den Füßen, kein Vollkreis
   if (shadow) {
-    ctx.save();
-    ctx.translate(4, 7);
-    ctx.fillStyle = 'rgba(10,10,20,0.35)';
-    ctx.fill(MEEPLE_PATH);
-    ctx.restore();
+    ctx.beginPath();
+    ctx.ellipse(52, 99, 30, 11, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(59,46,34,0.30)';
+    ctx.fill();
   }
-  const g = ctx.createRadialGradient(40, 26, 6, 50, 55, 75);
-  g.addColorStop(0, shade(color, 0.4));
-  g.addColorStop(0.45, color);
-  g.addColorStop(1, shade(color, -0.3));
-  ctx.fillStyle = g;
-  ctx.fill(MEEPLE_PATH);
-  // Trennring in zwei Lagen: außen der Halo gegen den Untergrund, innen die
-  // Kontur gegen die Füllfarbe. Eine einzelne Ringfarbe kann auf zweitonigen
-  // Flächen wie der Straße nicht gegen beide Töne bestehen.
+
   const rings = meepleRings(color);
   ctx.lineJoin = 'round';
-  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+
+  // Halo außen: hebt die Silhouette vom Untergrund ab
+  ctx.lineWidth = big ? 11 : 9;
   ctx.strokeStyle = rings.outer;
   ctx.stroke(MEEPLE_PATH);
-  ctx.lineWidth = 5;
+
+  // Füllung: Radialverlauf, Licht oben-links
+  const g = ctx.createRadialGradient(34, 24, 4, 52, 62, 82);
+  g.addColorStop(0, shade(color, 0.15));
+  g.addColorStop(0.45, color);
+  g.addColorStop(1, shade(color, -0.2));
+  ctx.fillStyle = g;
+  ctx.fill(MEEPLE_PATH);
+
+  // Kontur: dünn, 12 % dunkler, nie schwarz. Beim großen Meeple 20 % dicker.
+  ctx.lineWidth = big ? 4.2 : 3.5;
   ctx.strokeStyle = rings.inner;
   ctx.stroke(MEEPLE_PATH);
+
+  // Rim-Light: heller Bogen oben-links entlang der Kontur
+  ctx.save();
+  ctx.clip(MEEPLE_PATH);
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.beginPath();
-  ctx.ellipse(43, 21, 9, 6, -0.5, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.fill();
+  ctx.arc(50, 23, 16, Math.PI * 1.05, Math.PI * 1.62);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(50, 66, 40, Math.PI * 1.12, Math.PI * 1.38);
+  ctx.stroke();
+  ctx.restore();
+
   ctx.restore();
 }
 
@@ -328,11 +377,31 @@ registerLayer('cityPaving', (ctx, { tile, rng, lod }) => {
   for (const f of d.f) if (f.t === 'city') paintCity(ctx, d, f, tile.canvasRot, streamOf(rng), detailLevel(lod));
 });
 
-registerLayer('landmarks', (ctx, { tile }) => {
+registerLayer('landmarks', (ctx, { tile, rng, lod }) => {
   const d = tile.def;
   const rot = tile.canvasRot;
-  for (const f of d.f) if (f.t === 'city' && f.cath) paintCathedralAt(ctx, f, rot);
-  for (const f of d.f) if (f.t === 'mon') paintMonastery(ctx, f, rot);
+  const detail = detailLevel(lod);
+  const rnd = streamOf(rng);
+  // Wahrzeichen werden aufrecht gebaut, unabhängig von der Kacheldrehung
+  const upright2 = (draw) => {
+    ctx.save();
+    ctx.translate(0.5, 0.5);
+    ctx.rotate(-rot * Math.PI / 2);
+    ctx.translate(-0.5, -0.5);
+    draw();
+    ctx.restore();
+  };
+  for (const f of d.f) {
+    if (f.t !== 'mon') continue;
+    // Weg, der am Torbogen münden soll (Südseite bevorzugt)
+    const roadFeature = d.f.find((o) => o.t === 'road');
+    const roadSide = roadFeature ? roadFeature.e[0] : null;
+    upright2(() => drawMonastery(ctx, { sides: tile.sides, rnd, detail, roadSide }));
+  }
+  for (const f of d.f) {
+    if (f.t !== 'city' || !f.cath) continue;
+    upright2(() => drawCathedral(ctx, { rnd, detail, centre: f.spot }));
+  }
   for (const f of d.f) if (f.t === 'road' && f.inn) paintInn(ctx, f, rot);
 });
 
@@ -396,43 +465,75 @@ function paintGrass(ctx, rnd) {
   }
 }
 
+// §7 Nr. 3: Kronen aus 4–6 Kreisen mit gemeinsamer Schattenseite,
+// dazu drei Baumtypen – Laubbaum rund, Spitzbaum schlank, Obstbaum mit Früchten
 function paintBushes(ctx, rnd, d) {
-  const n = rnd() < 0.45 ? 1 : 0;
+  const n = rnd() < 0.55 ? 1 + ((rnd() * 2) | 0) : 0;
   for (let i = 0; i < n; i++) {
-    const x = 0.12 + rnd() * 0.76, y = 0.12 + rnd() * 0.76;
-    const r = 0.045 + rnd() * 0.02;
-    ctx.beginPath(); ctx.ellipse(x + 0.012, y + r * 0.75, r * 1.15, r * 0.4, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(20,40,10,0.25)'; ctx.fill();
-    for (const [dx, dy, rr, c] of [
-      [-r * 0.45, 0.01, r * 0.72, '#4c7a2e'],
-      [r * 0.4, 0.005, r * 0.66, '#55873a'],
-      [0, -r * 0.35, r * 0.8, '#5e9440'],
-    ]) {
-      ctx.beginPath(); ctx.arc(x + dx, y + dy, rr, 0, Math.PI * 2);
-      ctx.fillStyle = c; ctx.fill();
+    const x = 0.14 + rnd() * 0.72, y = 0.14 + rnd() * 0.72;
+    const r = 0.042 + rnd() * 0.022;
+    const kind = (rnd() * 3) | 0;
+    ctx.beginPath(); ctx.ellipse(x + 0.012, y + r * 0.8, r * 1.1, r * 0.34, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(59,46,34,0.24)'; ctx.fill();
+    if (kind === 1) {
+      // Spitzbaum
+      ctx.fillStyle = '#3f6b28';
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.7, y + r * 0.7);
+      ctx.lineTo(x, y - r * 1.25);
+      ctx.lineTo(x + r * 0.7, y + r * 0.7);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(150,200,110,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.7, y + r * 0.7);
+      ctx.lineTo(x, y - r * 1.25);
+      ctx.lineTo(x - r * 0.1, y + r * 0.7);
+      ctx.closePath(); ctx.fill();
+    } else {
+      // Krone aus 4–6 Kreisen, Schattenseite unten-rechts
+      const lobes = 4 + ((rnd() * 3) | 0);
+      for (let l = 0; l < lobes; l++) {
+        const a = (l / lobes) * Math.PI * 2 + rnd() * 0.4;
+        const dx = Math.cos(a) * r * 0.42, dy = Math.sin(a) * r * 0.36;
+        ctx.beginPath(); ctx.arc(x + dx, y + dy, r * 0.62, 0, Math.PI * 2);
+        ctx.fillStyle = (dx + dy) > 0 ? '#4a7a2c' : '#5e9440';
+        ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(x - r * 0.28, y - r * 0.4, r * 0.34, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(225,245,170,0.4)'; ctx.fill();
+      if (kind === 2) {
+        for (let f = 0; f < 3; f++) {
+          ctx.beginPath();
+          ctx.arc(x + (rnd() - 0.5) * r, y + (rnd() - 0.5) * r, r * 0.11, 0, Math.PI * 2);
+          ctx.fillStyle = '#C0452F'; ctx.fill();
+        }
+      }
     }
-    ctx.beginPath(); ctx.arc(x - r * 0.25, y - r * 0.45, r * 0.32, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(225,245,170,0.45)'; ctx.fill();
   }
 }
 
+// §7 Nr. 2: halbe Dichte, dafür in Gruppen von 3–5 statt einzeln
 function paintFlowers(ctx, d, rnd) {
-  const hasCity = d.f.some(f => f.t === 'city');
-  const n = hasCity ? 2 : 4;
-  for (let i = 0; i < n; i++) {
-    const x = 0.08 + rnd() * 0.84, y = 0.08 + rnd() * 0.84;
-    const col = ['#ffe28a', '#fff3f3', '#ffb1c1', '#c9a6ff'][i % 4];
-    for (let p = 0; p < 5; p++) {
-      const a = (p / 5) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.arc(x + Math.cos(a) * 0.009, y + Math.sin(a) * 0.009, 0.006, 0, Math.PI * 2);
-      ctx.fillStyle = col;
-      ctx.globalAlpha = 0.9;
-      ctx.fill();
+  const groups = d.f.some(f => f.t === 'city') ? 1 : 2;
+  for (let g = 0; g < groups; g++) {
+    const gx = 0.12 + rnd() * 0.76, gy = 0.12 + rnd() * 0.76;
+    const col = ['#ffe28a', '#fff3f3', '#ffb1c1', '#c9a6ff'][(rnd() * 4) | 0];
+    const n = 3 + ((rnd() * 3) | 0);
+    for (let i = 0; i < n; i++) {
+      const x = gx + (rnd() - 0.5) * 0.07;
+      const y = gy + (rnd() - 0.5) * 0.06;
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * 0.008, y + Math.sin(a) * 0.008, 0.0055, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.globalAlpha = 0.9;
+        ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(x, y, 0.0045, 0, Math.PI * 2);
+      ctx.fillStyle = '#e8a12c'; ctx.fill();
+      ctx.globalAlpha = 1;
     }
-    ctx.beginPath(); ctx.arc(x, y, 0.005, 0, Math.PI * 2);
-    ctx.fillStyle = '#e8a12c'; ctx.fill();
-    ctx.globalAlpha = 1;
   }
 }
 
@@ -493,26 +594,53 @@ function paintRoad(ctx, d, f) {
     ctx.beginPath(); ctx.arc(e[0], e[1], 0.05, 0, Math.PI * 2);
     ctx.fillStyle = '#e9dcb6'; ctx.fill();
     ctx.lineWidth = 0.014; ctx.strokeStyle = '#7d6543'; ctx.stroke();
+    // Poller markieren das Wegende (§7 Nr. 4)
+    for (const side of [-1, 1]) {
+      const px = e[0] + side * 0.032, py = e[1] + 0.006;
+      ctx.beginPath(); ctx.ellipse(px + 0.004, py + 0.012, 0.011, 0.005, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(59,46,34,0.28)'; ctx.fill();
+      ctx.fillStyle = pshade('#6B4A2F', 0.15);
+      ctx.fillRect(px - 0.006, py - 0.018, 0.012, 0.028);
+      ctx.fillStyle = pshade('#6B4A2F', -0.25);
+      ctx.fillRect(px + 0.001, py - 0.018, 0.005, 0.028);
+    }
   }
 }
 
+// §7 Nr. 5: Pflaster radial um den Brunnen, zwei Ringe unterschiedlicher
+// Steingröße, Brunnen mit Dachgestell
 function paintPlaza(ctx, rnd) {
-  ctx.beginPath(); ctx.arc(0.5, 0.5, 0.115, 0, Math.PI * 2);
+  ctx.beginPath(); ctx.arc(0.5, 0.5, 0.12, 0, Math.PI * 2);
   ctx.fillStyle = '#e9dcb6'; ctx.fill();
-  ctx.lineWidth = 0.015; ctx.strokeStyle = '#7d6543'; ctx.stroke();
-  for (let i = 0; i < 8; i++) {
-    const a = rnd() * Math.PI * 2, r = 0.045 + rnd() * 0.05;
-    ctx.beginPath();
-    ctx.arc(0.5 + Math.cos(a) * r, 0.5 + Math.sin(a) * r, 0.008, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(140,115,80,0.5)'; ctx.fill();
+  ctx.lineWidth = 0.014; ctx.strokeStyle = '#7d6543'; ctx.stroke();
+  ctx.strokeStyle = 'rgba(140,115,80,0.45)';
+  for (const [ring, count, r0, r1] of [[0, 10, 0.055, 0.085], [1, 16, 0.088, 0.118]]) {
+    ctx.lineWidth = ring ? 0.004 : 0.005;
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + ring * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(0.5 + Math.cos(a) * r0, 0.5 + Math.sin(a) * r0);
+      ctx.lineTo(0.5 + Math.cos(a) * r1, 0.5 + Math.sin(a) * r1);
+      ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(0.5, 0.5, r1, 0, Math.PI * 2); ctx.stroke();
   }
-  // Brunnen
-  ctx.beginPath(); ctx.arc(0.5, 0.5, 0.034, 0, Math.PI * 2);
+  // Brunnen mit Dachgestell
+  ctx.beginPath(); ctx.arc(0.5, 0.5, 0.032, 0, Math.PI * 2);
   ctx.fillStyle = '#93805e'; ctx.fill();
-  ctx.beginPath(); ctx.arc(0.5, 0.5, 0.021, 0, Math.PI * 2);
-  ctx.fillStyle = '#3d6d9e'; ctx.fill();
-  ctx.beginPath(); ctx.arc(0.494, 0.494, 0.007, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(0.5, 0.5, 0.02, 0, Math.PI * 2);
+  ctx.fillStyle = '#2b5f95'; ctx.fill();
+  ctx.beginPath(); ctx.arc(0.494, 0.494, 0.006, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
+  ctx.strokeStyle = '#6B4A2F'; ctx.lineWidth = 0.006;
+  ctx.beginPath();
+  ctx.moveTo(0.472, 0.5); ctx.lineTo(0.472, 0.462);
+  ctx.moveTo(0.528, 0.5); ctx.lineTo(0.528, 0.462);
+  ctx.stroke();
+  ctx.fillStyle = '#a8432f';
+  ctx.beginPath();
+  ctx.moveTo(0.462, 0.462); ctx.lineTo(0.5, 0.438); ctx.lineTo(0.538, 0.462);
+  ctx.closePath(); ctx.fill();
 }
 
 // ----- Fluss -----
@@ -532,7 +660,42 @@ function paintRiver(ctx, d, f, rnd = null) {
   strokePass(ctx, pts, curved, W, '#2b5f95');                      // Wasser
   strokePass(ctx, pts, curved, W * 0.73, '#3d78b0');
   strokePass(ctx, pts, curved, W * 0.39, '#5b93c7', null, 0.8);
-  strokePass(ctx, pts, curved, W * 0.17, '#a7cdEC', [0.07, 0.09], 0.65); // Glanzband
+  // §7 Nr. 6: Glanzband nur auf der lichtzugewandten Seite (oben-links),
+  // dazu kleine Kringel nahe dem Ufer
+  ctx.save();
+  ctx.translate(-W * 0.16, -W * 0.16);
+  strokePass(ctx, pts, curved, W * 0.15, '#a7cdec', [0.07, 0.1], 0.5);
+  ctx.restore();
+  if (pts.length >= 2) {
+    const mid = pts.length === 3 ? pts[1] : [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2];
+    for (let i = 0; i < 3; i++) {
+      const a = rnd() * Math.PI * 2, rr = W * (0.5 + rnd() * 0.35);
+      ctx.beginPath();
+      ctx.arc(mid[0] + Math.cos(a) * rr, mid[1] + Math.sin(a) * rr, W * 0.08, 0.6, 2.6);
+      ctx.strokeStyle = 'rgba(200,230,250,0.45)';
+      ctx.lineWidth = 0.005;
+      ctx.stroke();
+    }
+    // Schilfbüschel an zwei bis drei Stellen am Ufer
+    for (let i = 0; i < 2 + ((rnd() * 2) | 0); i++) {
+      const t = 0.2 + rnd() * 0.6;
+      const base = pts.length === 3
+        ? [(1 - t) * (1 - t) * pts[0][0] + 2 * (1 - t) * t * pts[1][0] + t * t * pts[2][0],
+           (1 - t) * (1 - t) * pts[0][1] + 2 * (1 - t) * t * pts[1][1] + t * t * pts[2][1]]
+        : [pts[0][0] + (pts[1][0] - pts[0][0]) * t, pts[0][1] + (pts[1][1] - pts[0][1]) * t];
+      const side = rnd() > 0.5 ? 1 : -1;
+      const rx = base[0] + side * W * 0.62, ry = base[1] + side * W * 0.16;
+      ctx.strokeStyle = '#4E8438';
+      ctx.lineWidth = 0.005;
+      ctx.lineCap = 'round';
+      for (let b = -2; b <= 2; b++) {
+        ctx.beginPath();
+        ctx.moveTo(rx + b * 0.006, ry);
+        ctx.quadraticCurveTo(rx + b * 0.009, ry - 0.018, rx + b * 0.014, ry - 0.03);
+        ctx.stroke();
+      }
+    }
+  }
   rnd = rnd || mulberry(hash(d.id + 'w'));
   if (d.riverStart) {
     const [gx, gy] = pts[1];
@@ -584,6 +747,9 @@ function cityPaths(edges) {
   let hasWall = true;
   const raw = new Path2D();
   const rawWall = new Path2D();
+  // dieselben Kurven noch einmal als Zahlen, damit die Zinnen sie abtasten
+  // können – Path2D gibt seine Geometrie nicht heraus
+  const wallCurves = [];
   if (set.length === 4) {
     raw.rect(-0.02, -0.02, 1.04, 1.04);
     hasWall = false;
@@ -593,6 +759,7 @@ function cityPaths(edges) {
     raw.bezierCurveTo(1, 0.5, 0, 0.5, 0, 0);
     raw.closePath();
     rawWall.moveTo(1, 0); rawWall.bezierCurveTo(1, 0.5, 0, 0.5, 0, 0);
+    wallCurves.push([1, 0, 1, 0.5, 0, 0.5, 0, 0]);
   } else if (set.length === 2 && (set[1] - set[0]) % 4 === 2) {
     // Band N-S: volle Breite an beiden Stadtkanten, seitliche
     // Wiesen-Taschen (Tiefe 0.15), senkrecht in allen vier Ecken
@@ -609,6 +776,8 @@ function cityPaths(edges) {
     rawWall.moveTo(0, 0);
     rawWall.bezierCurveTo(0, 0.33, 0.15, 0.33, 0.15, 0.5);
     rawWall.bezierCurveTo(0.15, 0.67, 0, 0.67, 0, 1);
+    wallCurves.push([1, 0, 1, 0.33, 0.85, 0.33, 0.85, 0.5], [0.85, 0.5, 0.85, 0.67, 1, 0.67, 1, 1],
+      [0, 0, 0, 0.33, 0.15, 0.33, 0.15, 0.5], [0.15, 0.5, 0.15, 0.67, 0, 0.67, 0, 1]);
   } else if (set.length === 2) {
     // Ecke N+W: Bogen von SW-Ecke (senkrecht) über (0.56,0.56)
     // zur NO-Ecke (waagerecht)
@@ -620,6 +789,7 @@ function cityPaths(edges) {
     rawWall.moveTo(0, 1);
     rawWall.bezierCurveTo(0, 0.76, 0.40, 0.72, 0.56, 0.56);
     rawWall.bezierCurveTo(0.72, 0.40, 0.76, 0, 1, 0);
+    wallCurves.push([0, 1, 0, 0.76, 0.40, 0.72, 0.56, 0.56], [0.56, 0.56, 0.72, 0.40, 0.76, 0, 1, 0]);
   } else {
     // 3 Kanten, offen nach S: Wiesen-Tasche unten (Tiefe ~0.285)
     raw.moveTo(-0.02, 1); raw.lineTo(-0.02, -0.02); raw.lineTo(1.02, -0.02);
@@ -627,10 +797,11 @@ function cityPaths(edges) {
     raw.bezierCurveTo(1, 0.62, 0, 0.62, 0, 1);
     raw.closePath();
     rawWall.moveTo(1, 1); rawWall.bezierCurveTo(1, 0.62, 0, 0.62, 0, 1);
+    wallCurves.push([1, 1, 1, 0.62, 0, 0.62, 0, 1]);
   }
   region.addPath(raw, m);
   walls.addPath(rawWall, m);
-  return { region, walls: hasWall ? walls : null };
+  return { region, walls: hasWall ? walls : null, wallCurves, rot: k };
 }
 
 const ROOFS = ['#b5502e', '#a34627', '#c2662f', '#8f3d22', '#ad5a35', '#96482a'];
@@ -679,31 +850,111 @@ function paintCity(ctx, d, f, rot, rnd, detail = 2) {
     opts: {
       fortified: f.shield > 0 || d.f.some((o) => o.t === 'road'),
       largeCity: f.e.length >= 3,
-      maxHouses: f.e.length >= 3 ? 16 : f.e.length === 2 ? 12 : 9,
+      // Bei einer Kathedrale weichen die Häuser: weniger, kleiner, und die
+      // Mitte bleibt frei – die Größenhierarchie macht die Wirkung (§5).
+      maxHouses: f.cath ? 8 : (f.e.length >= 3 ? 16 : f.e.length === 2 ? 12 : 9),
+      houseScale: f.cath ? 0.75 : 1,
+      reserved: f.cath ? { x: f.spot[0], y: f.spot[1], r: 0.42 } : null,
     },
   });
   ctx.restore();
   ctx.restore();
-  // Stadtmauer mit Zinnen
+  // Stadtmauer (§7 Nr. 10): Mauerband, darauf einzelne Zinnen mit Licht-
+  // und Schattenseite, alle rund 25 % ein Mauerturm.
   if (walls) {
     ctx.save();
     ctx.lineCap = 'butt';
-    ctx.strokeStyle = 'rgba(40,25,12,0.35)';
-    ctx.lineWidth = 0.075;
+    ctx.strokeStyle = 'rgba(40,25,12,0.32)';
+    ctx.lineWidth = 0.078;
     ctx.stroke(walls);
-    ctx.strokeStyle = '#6d5138';
-    ctx.lineWidth = 0.052;
+    ctx.strokeStyle = shade(PALETTE.wallShadow, -0.1);
+    ctx.lineWidth = 0.058;
     ctx.stroke(walls);
-    ctx.setLineDash([0.045, 0.038]);
-    ctx.strokeStyle = '#7e5f42';
-    ctx.lineWidth = 0.085;
+    ctx.strokeStyle = PALETTE.wallStone;
+    ctx.lineWidth = 0.042;
     ctx.stroke(walls);
-    ctx.setLineDash([]);
-    ctx.strokeStyle = 'rgba(245,225,190,0.5)';
+    // Lichtkante oben-links auf dem Mauerband
+    ctx.strokeStyle = withAlpha(shade(PALETTE.wallStone, 0.25), 0.7);
     ctx.lineWidth = 0.012;
     ctx.stroke(walls);
+    paintBattlements(ctx, f.e, rnd, detail);
     ctx.restore();
   }
+}
+
+/**
+ * Zinnen und Mauertürme entlang der Stadtmauer. Abgetastet wird der
+ * Mauerpfad, damit die Zinnen der Krümmung folgen.
+ */
+function paintBattlements(ctx, edges, rnd, detail) {
+  const pts = wallSamples(edges);
+  if (!pts.length) return;
+  const step = detail > 1 ? 3 : 5;
+  let sinceTower = 0;
+  for (let i = 1; i < pts.length - 1; i += step) {
+    const p = pts[i];
+    const prev = pts[i - 1], next = pts[Math.min(pts.length - 1, i + 1)];
+    const a = Math.atan2(next.y - prev.y, next.x - prev.x);
+    sinceTower++;
+    // alle rund 25 % der Länge ein Mauerturm
+    if (sinceTower * step > pts.length * 0.24) {
+      sinceTower = 0;
+      paintWallTower(ctx, p.x, p.y, detail);
+      continue;
+    }
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(a);
+    const bw = 0.028, bh = 0.03;
+    ctx.fillStyle = shade(PALETTE.wallStone, 0.16);       // Lichtseite
+    ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+    ctx.fillStyle = shade(PALETTE.wallStone, -0.2);       // Schattenseite
+    ctx.fillRect(bw * 0.12, -bh / 2, bw * 0.38, bh);
+    ctx.restore();
+  }
+}
+
+function paintWallTower(ctx, x, y, detail) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.042, 0, Math.PI * 2);
+  ctx.fillStyle = shade(PALETTE.wallStone, -0.12);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-0.008, -0.008, 0.032, 0, Math.PI * 2);
+  ctx.fillStyle = shade(PALETTE.wallStone, 0.14);
+  ctx.fill();
+  if (detail > 0) {
+    ctx.fillStyle = withAlpha(PALETTE.shadow, 0.6);
+    ctx.fillRect(-0.005, -0.012, 0.01, 0.024);
+  }
+  ctx.restore();
+}
+
+/**
+ * Punkte entlang der Stadtmauer. Path2D lässt sich nicht abtasten, deshalb
+ * liefert cityPaths die Mauer zusätzlich als Kurvenliste.
+ */
+function wallSamples(edges) {
+  const { wallCurves, rot } = cityPaths(edges);
+  if (!wallCurves.length) return [];
+  const out = [];
+  const cos = Math.cos(rot * Math.PI / 2), sin = Math.sin(rot * Math.PI / 2);
+  const rotate = (x, y) => ({
+    x: 0.5 + (x - 0.5) * cos - (y - 0.5) * sin,
+    y: 0.5 + (x - 0.5) * sin + (y - 0.5) * cos,
+  });
+  for (const c of wallCurves) {
+    const steps = 26;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps, u = 1 - t;
+      const x = u * u * u * c[0] + 3 * u * u * t * c[2] + 3 * u * t * t * c[4] + t * t * t * c[6];
+      const y = u * u * u * c[1] + 3 * u * u * t * c[3] + 3 * u * t * t * c[5] + t * t * t * c[7];
+      out.push(rotate(x, y));
+    }
+  }
+  return out;
 }
 
 function paintHouse(ctx, { w, h, roof }) {
@@ -1002,12 +1253,12 @@ function woodPattern(ctx) {
         xx = gx + Math.sin(yy * 0.02 + rnd() * 6) * 4;
         w.lineTo(xx, yy);
       }
-      w.strokeStyle = rnd() > 0.6 ? 'rgba(20,12,6,0.16)' : 'rgba(120,88,60,0.10)';
+      w.strokeStyle = rnd() > 0.6 ? 'rgba(20,12,6,0.10)' : 'rgba(120,88,60,0.07)';
       w.lineWidth = 0.8 + rnd() * 1.4;
       w.stroke();
     }
     // Astloch gelegentlich
-    if (rnd() < 0.5) {
+    if (rnd() < 0.22) {
       const kx = x0 + 15 + rnd() * (plank - 30), ky = rnd() * 360;
       for (let r = 6; r > 0; r -= 1.6) {
         w.beginPath(); w.ellipse(kx, ky, r, r * 1.5, 0.2, 0, Math.PI * 2);
@@ -1030,10 +1281,10 @@ function makeShadowSprite() {
   const c = document.createElement('canvas');
   c.width = c.height = 144;
   const g = c.getContext('2d');
-  g.shadowColor = 'rgba(0,0,0,0.55)';
-  g.shadowBlur = 16;
-  g.shadowOffsetY = 5;
-  g.fillStyle = 'rgba(0,0,0,0.4)';
+  g.shadowColor = 'rgba(0,0,0,0.42)';
+  g.shadowBlur = 11;
+  g.shadowOffsetY = 3;
+  g.fillStyle = 'rgba(0,0,0,0.3)';
   g.fillRect(32, 32, 80, 80);
   shadowSprite = c;
   return c;
@@ -1125,7 +1376,7 @@ export class BoardView {
     const light = ctx.createRadialGradient(r.width / 2, r.height * 0.38, 40, r.width / 2, r.height / 2, Math.max(r.width, r.height) * 0.85);
     light.addColorStop(0, 'rgba(255,225,170,0.10)');
     light.addColorStop(0.55, 'rgba(0,0,0,0)');
-    light.addColorStop(1, 'rgba(0,0,0,0.5)');
+    light.addColorStop(1, 'rgba(0,0,0,0.34)');
     ctx.fillStyle = light;
     ctx.fillRect(0, 0, r.width, r.height);
 
@@ -1162,17 +1413,15 @@ export class BoardView {
     tileCache.drainBudget(drawTileJob);
     // legale Felder: dezente, flache Markierung ohne Leuchten
     if (view.legal) {
-      const m = s * 0.07;
+      // §7 Nr. 22: nur ein ruhig pulsierender Rand, keine gefüllte Fläche
+      const m = s * 0.06;
+      const pulse = 0.32 + 0.16 * Math.sin(now / 520);
       for (const c of view.legal) {
         const [sx, sy] = this.worldToScreen(c.x, c.y);
-        this.rounded(ctx, sx - s / 2 + m, sy - s / 2 + m, s - 2 * m, s - 2 * m, s * 0.07);
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fill();
-        ctx.setLineDash([s * 0.08, s * 0.05]);
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 1.5;
+        this.rounded(ctx, sx - s / 2 + m, sy - s / 2 + m, s - 2 * m, s - 2 * m, s * 0.06);
+        ctx.strokeStyle = `rgba(255,246,224,${pulse})`;
+        ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.setLineDash([]);
       }
     }
 
