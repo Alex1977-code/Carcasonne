@@ -92,18 +92,49 @@ export function tileArt(defId, rot) {
   ctx.scale(ART_SIZE, ART_SIZE);
   paintTile(ctx, DEFS[defId], rot);
   ctx.restore();
-  // Kante mit leichtem Relief (nicht mitrotiert)
-  const s = ART_SIZE;
-  ctx.strokeStyle = 'rgba(255,250,230,0.20)';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(1, s - 1); ctx.lineTo(1, 1); ctx.lineTo(s - 1, 1); ctx.stroke();
-  ctx.strokeStyle = 'rgba(40,25,10,0.28)';
-  ctx.beginPath(); ctx.moveTo(s - 1, 1); ctx.lineTo(s - 1, s - 1); ctx.lineTo(1, s - 1); ctx.stroke();
-  ctx.strokeStyle = 'rgba(45,30,15,0.5)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(0.75, 0.75, s - 1.5, s - 1.5);
+  paintTileBorder(ctx, DEFS[defId], rot);
   artCache.set(k, c);
   return c;
+}
+
+// Kachelrand ohne Raster: Ein gerichtetes Relief (hell oben/links, dunkel
+// unten/rechts) ergibt über mehrere Karten hinweg ein Gitter – besonders
+// sichtbar auf einer zusammengesetzten Stadt. Deshalb eine einzige, gleich
+// helle Haarlinie, die an Stadtkanten ganz abbricht und an Straßen und
+// Flüssen die Anschlussbreite frei lässt.
+const BORDER_GAP = { R: 0.16, W: 0.2 };
+
+function paintTileBorder(ctx, d, rot) {
+  const s = ART_SIZE;
+  const inset = 0.75;
+  // Punkt auf der Kante (Endlage, also nach der Drehung) bei Anteil t
+  const at = (dir, t) => {
+    const p = t * s;
+    if (dir === 0) return [p, inset];
+    if (dir === 1) return [s - inset, p];
+    if (dir === 2) return [p, s - inset];
+    return [inset, p];
+  };
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = 'rgba(52,34,16,0.3)';
+  for (let dir = 0; dir < 4; dir++) {
+    const type = d.edges[(dir - rot + 4) % 4];
+    if (type === 'C') continue;                   // Stadt: Mauer trägt die Kante
+    const gap = BORDER_GAP[type] || 0;            // Straße/Fluss: Anschluss frei
+    const spans = gap > 0
+      ? [[0, 0.5 - gap / 2], [0.5 + gap / 2, 1]]
+      : [[0, 1]];
+    for (const [a, b] of spans) {
+      const p0 = at(dir, a), p1 = at(dir, b);
+      ctx.beginPath();
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.lineTo(p1[0], p1[1]);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function paintTile(ctx, d, rot = 0) {
@@ -132,11 +163,10 @@ function upright(ctx, x, y, rot, draw) {
 
 // ----- Wiese -----
 function paintGrass(ctx, rnd) {
-  const g = ctx.createLinearGradient(0, 0, 0.6, 1);
-  g.addColorStop(0, '#8dbb58');
-  g.addColorStop(0.5, '#7cad4b');
-  g.addColorStop(1, '#6d9f41');
-  ctx.fillStyle = g;
+  // Flacher Grundton statt Verlauf: ein gerichteter Verlauf wiederholt sich
+  // auf jeder Karte und ergibt über mehrere Karten ein sichtbares Raster.
+  // Die Lebendigkeit kommt aus den zufälligen Flecken darunter.
+  ctx.fillStyle = '#7cad4b';
   ctx.fillRect(0, 0, 1, 1);
   // weiche Farbflecken für lebendige Fläche
   for (let i = 0; i < 7; i++) {
@@ -407,11 +437,9 @@ const ROOFS = ['#b5502e', '#a34627', '#c2662f', '#8f3d22', '#ad5a35', '#96482a']
 function paintCity(ctx, d, f, rot = 0) {
   const { region, walls } = cityPaths(f.e);
   const rnd = mulberry(hash(d.id + ':' + f.e.join('')));
-  // Grundfläche: warmes Pflaster
-  const g = ctx.createLinearGradient(0, 0, 1, 1);
-  g.addColorStop(0, '#cfa269');
-  g.addColorStop(1, '#b0824c');
-  ctx.fillStyle = g;
+  // Grundfläche: warmes Pflaster, flach (siehe paintGrass – kein Raster
+  // über Kartengrenzen hinweg)
+  ctx.fillStyle = '#c0925b';
   ctx.fill(region);
   ctx.save();
   ctx.clip(region);
