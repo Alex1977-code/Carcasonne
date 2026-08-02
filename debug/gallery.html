@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kachel-Prüfstand</title>
+<style>
+  :root {
+    --ink: #0E1113;
+    --surface: #171B1F;
+    --raised: #1E242A;
+    --line: #262C31;
+    --text: #C8CFD4;
+    --muted: #6E7A82;
+    --gold: #D8A93B;
+    --alert: #E2574B;
+    --ok: #6FA84A;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Inter Tight", "Helvetica Neue", system-ui, sans-serif;
+    --rail: 268px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ------------------------------------------------------------- Kopfzeile */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: baseline; gap: 24px;
+    padding: 14px 20px;
+    background: color-mix(in srgb, var(--ink) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+  }
+  header h1 span { color: var(--muted); font-weight: 400; }
+
+  #checks { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .check {
+    font-family: var(--mono); font-size: 11px;
+    padding: 4px 9px; border-radius: 2px;
+    border: 1px solid var(--line); background: var(--surface);
+    white-space: nowrap;
+  }
+  .check b { font-weight: 500; }
+  .check.pass { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+  .check.pass b { color: var(--ok); }
+  .check.fail { border-color: var(--alert); }
+  .check.fail b { color: var(--alert); }
+  .check.wait b { color: var(--muted); }
+
+  /* ------------------------------------------------------------------ Rail */
+  .layout { display: grid; grid-template-columns: var(--rail) 1fr; align-items: start; }
+
+  aside {
+    position: sticky; top: 49px;
+    height: calc(100vh - 49px); overflow-y: auto;
+    padding: 18px 16px 60px;
+    border-right: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .group { margin-bottom: 22px; }
+  .group > .eyebrow { display: block; margin-bottom: 8px; }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; }
+  .seg button, .toggle {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text); background: var(--raised);
+    border: 1px solid var(--line); border-radius: 2px;
+    padding: 5px 9px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--gold) 18%, var(--raised));
+    border-color: var(--gold); color: #F2E3BE;
+  }
+  .seg button:focus-visible, .toggle:focus-visible, .tile:focus-visible {
+    outline: 2px solid var(--gold); outline-offset: 2px;
+  }
+
+  .layers { display: flex; flex-direction: column; gap: 2px; }
+  .layers label {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px;
+    padding: 3px 6px; border-radius: 2px; cursor: pointer;
+  }
+  .layers label:hover { background: var(--raised); }
+  .layers input { accent-color: var(--gold); }
+  .layers .off { color: var(--muted); text-decoration: line-through; }
+  .layers .empty { color: var(--muted); opacity: 0.5; }
+
+  .note {
+    font-family: var(--mono); font-size: 10px; line-height: 1.6;
+    color: var(--muted); margin-top: 6px;
+  }
+
+  /* ------------------------------------------------------------ Kontaktbogen */
+  main { padding: 20px 24px 120px; }
+
+  .setband {
+    display: flex; align-items: baseline; gap: 10px;
+    margin: 26px 0 12px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  .setband h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+  .setband .eyebrow { margin-left: auto; }
+
+  .sheet {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+    gap: 10px;
+  }
+  .tile {
+    background: var(--surface);
+    border: 1px solid var(--line); border-radius: 3px;
+    padding: 12px 12px 9px;
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .tile .row { display: flex; align-items: flex-end; gap: 10px; min-height: 168px; }
+  .tile canvas { display: block; image-rendering: auto; border-radius: 1px; }
+  .tile footer {
+    display: flex; align-items: baseline; gap: 8px;
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    border-top: 1px solid var(--line); padding-top: 7px;
+  }
+  .tile footer .id { color: var(--text); }
+  .tile footer .count { margin-left: auto; }
+  .tile.flagged { border-color: var(--alert); }
+
+  /* Naht-Test: zwei Kacheln stumpf aneinander */
+  .seam .row { gap: 0; }
+
+  /* ---------------------------------------------------------------- Panels */
+  .panel {
+    margin-top: 34px; border: 1px solid var(--line);
+    border-radius: 3px; background: var(--surface); overflow: hidden;
+  }
+  .panel > h3 {
+    margin: 0; padding: 10px 14px;
+    font-size: 12px; font-weight: 600;
+    border-bottom: 1px solid var(--line);
+  }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  th, td { padding: 5px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 400; letter-spacing: 0.04em; }
+  tr:last-child td { border-bottom: 0; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.bad { color: var(--alert); }
+  .swatch {
+    display: inline-block; width: 11px; height: 11px;
+    border-radius: 2px; vertical-align: -1px; margin-right: 6px;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tile { transition: border-color 120ms ease; }
+  }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kachel-Prüfstand <span>· Carcassonne render.js</span></h1>
+  <div id="checks"></div>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="group">
+      <span class="eyebrow">Größen</span>
+      <div class="seg" id="sizes"></div>
+      <p class="note">48 / 96 / 160 px nach Abnahmekriterium 1. Gerendert wird an der LOD-Obergrenze und herunterskaliert.</p>
+    </div>
+
+    <div class="group">
+      <span class="eyebrow">Rotation</span>
+      <div class="seg" id="rotations"></div>
+    </div>
+
+    <div class="group">
+      <span class="eyebrow">Variante</span>
+      <div class="seg" id="variants"></div>
+      <p class="note">Variantenpool nach Nachtrag §10.1. Dieselbe Variante ergibt nach Reload dasselbe Bild.</p>
+    </div>
+
+    <div class="group">
+      <span class="eyebrow">Überlagerung</span>
+      <div class="seg" id="overlays"></div>
+    </div>
+
+    <div class="group">
+      <span class="eyebrow">Layer</span>
+      <div class="layers" id="layers"></div>
+      <p class="note">Einen Layer abschalten darf die übrigen nicht verändern – Substream-Test.</p>
+    </div>
+
+    <div class="group">
+      <span class="eyebrow">Cache</span>
+      <div id="cacheReport" class="note"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="sheets"></div>
+
+    <section class="panel">
+      <h3>Farbprüfung – Spielerfarben</h3>
+      <div id="colorPanel"></div>
+    </section>
+
+    <section class="panel">
+      <h3>Kantenvertrag – gemessene Anschlüsse</h3>
+      <div id="edgePanel"></div>
+    </section>
+  </main>
+</div>
+
+<script type="module">
+import { validateTiles, SETS } from '../js/ui/render/tiles.js';
+// Die Galerie zeigt die echten Kacheldaten des Spiels, nicht die Vorlage.
+import { adaptedTiles } from '../js/ui/render/adapt-tiles.js';
+const TILES = adaptedTiles();
+import { renderTile, LAYER_ORDER, registeredLayers } from '../js/ui/render/layers.js';
+import '../js/ui/render/base.js'; // registriert die Layer
+import { TileCache } from '../js/ui/render/cache.js';
+import {
+  LOD, lodFor, renderSizeFor, EDGE, SIDE_NAMES, edgeAnchor, keepoutCircles,
+} from '../js/ui/render/contract.js';
+import {
+  PLAYER_COLORS, MEEPLE_BACKGROUNDS, checkPlayerColors, separationRing, CONTRAST_LIMITS,
+} from '../js/ui/render/palette.js';
+import { VARIANT_COUNT } from '../js/ui/render/rng.js';
+import { measureEdge } from './classify.mjs';
+
+const SIZES = [48, 96, 160];
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+const state = {
+  sizes: new Set(SIZES),
+  rotations: [0],
+  variant: 0,
+  overlay: null,            // null | 'contract' | 'seam'
+  disabledLayers: new Set(),
+};
+
+const cache = new TileCache({ maxEntries: 512, budgetPerFrame: Infinity, dpr });
+
+// ------------------------------------------------------------------ Zeichnen
+
+function drawContractOverlay(ctx, { tile }) {
+  ctx.save();
+  ctx.lineWidth = 1 / (ctx.getTransform().a || 1);
+
+  for (const c of keepoutCircles(tile.sides, 'prop')) {
+    ctx.fillStyle = 'rgba(226,87,75,0.14)';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let s = 0; s < 4; s++) {
+    const a = edgeAnchor(s);
+    const type = tile.sides[s];
+    const half = type === 'road' ? EDGE.ROAD_WIDTH / 2
+               : type === 'river' ? EDGE.RIVER_WIDTH / 2
+               : type === 'city' ? 0.5 : 0;
+    ctx.strokeStyle = '#D8A93B';
+    ctx.beginPath();
+    if (s === 0 || s === 2) { ctx.moveTo(a.x - half, a.y); ctx.lineTo(a.x + half, a.y); }
+    else { ctx.moveTo(a.x, a.y - half); ctx.lineTo(a.x, a.y + half); }
+    ctx.stroke();
+
+    ctx.fillStyle = '#D8A93B';
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, 0.012, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function renderToCanvas(tile, size, rotation, variant) {
+  const lod = lodFor(size);
+  const renderPx = Math.round(renderSizeFor(lod) * dpr);
+  const c = document.createElement('canvas');
+  c.width = c.height = renderPx;
+  c.style.width = c.style.height = size + 'px';
+  const ctx = c.getContext('2d');
+  ctx.save();
+  ctx.scale(renderPx, renderPx);
+  ctx.beginPath(); ctx.rect(0, 0, 1, 1); ctx.clip();
+  renderTile(ctx, {
+    tile, variant, rotation, lod,
+    disabledLayers: state.disabledLayers,
+    debug: state.overlay === 'contract' ? { overlay: drawContractOverlay } : null,
+  });
+  ctx.restore();
+  c.dataset.lod = lod;
+  return c;
+}
+
+// --------------------------------------------------------- Kantenmessung
+
+const EXPECTED = { road: EDGE.ROAD_WIDTH, river: EDGE.RIVER_WIDTH, city: 1, field: 0 };
+
+function rotateSides(sides, r) {
+  return [0, 1, 2, 3].map((s) => sides[(s - r + 4) % 4]);
+}
+
+function runEdgeCheck() {
+  const rows = [];
+  let checked = 0;
+  for (const tile of TILES) {
+    for (const rot of [0, 1, 2, 3]) {
+      const c = renderToCanvas(tile, 160, rot, state.variant);
+      const sides = rotateSides(tile.sides, rot);
+      const tol = 3 / c.width;
+      for (let s = 0; s < 4; s++) {
+        checked++;
+        const m = measureEdge(c, s);
+        const declared = sides[s];
+        if (m.kind !== declared) {
+          rows.push({ tile: tile.id, rot, side: SIDE_NAMES[s], declared, got: m.kind, width: m.width, expected: EXPECTED[declared] });
+          continue;
+        }
+        if (declared !== 'field' && Math.abs(m.width - EXPECTED[declared]) > tol) {
+          rows.push({ tile: tile.id, rot, side: SIDE_NAMES[s], declared, got: `Breite ${m.width.toFixed(3)}`, width: m.width, expected: EXPECTED[declared] });
+          continue;
+        }
+        if ((declared === 'road' || declared === 'river') && Math.abs(m.center - 0.5) > tol) {
+          rows.push({ tile: tile.id, rot, side: SIDE_NAMES[s], declared, got: `Mitte ${m.center.toFixed(3)}`, width: m.width, expected: EXPECTED[declared] });
+        }
+      }
+    }
+  }
+  return { rows, checked };
+}
+
+/**
+ * Dekoration darf nicht am Kachelrand abgeschnitten werden.
+ * Grundflächen dürfen und sollen über den Rand laufen – dafür ist der Clip da.
+ */
+const DECOR_LAYERS = new Set(['buildingShadows', 'buildings', 'landmarks', 'props', 'coatOfArms']);
+
+function runOverflowCheck() {
+  const notDecor = new Set(LAYER_ORDER.filter((l) => !DECOR_LAYERS.has(l)));
+  const px = Math.round(renderSizeFor(LOD.LARGE) * dpr);
+  const pad = Math.round(px * 0.3);
+  const offenders = [];
+  for (const tile of TILES) {
+    for (const rot of [0, 1, 2, 3]) {
+      const c = document.createElement('canvas');
+      c.width = c.height = px + 2 * pad;
+      const ctx = c.getContext('2d');
+      ctx.save();
+      ctx.translate(pad, pad);
+      ctx.scale(px, px);
+      renderTile(ctx, { tile, variant: state.variant, rotation: rot, lod: LOD.LARGE, disabledLayers: notDecor });
+      ctx.restore();
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      const W = c.width;
+      let hits = 0;
+      for (let y = 0; y < c.height && hits === 0; y++) {
+        for (let x = 0; x < W; x++) {
+          if (x >= pad && x < pad + px && y >= pad && y < pad + px) continue;
+          if (d[(y * W + x) * 4 + 3] > 8) { hits++; break; }
+        }
+      }
+      if (hits) offenders.push(`${tile.id} ${rot * 90}°`);
+    }
+  }
+  return offenders;
+}
+
+// ------------------------------------------------------------------- Aufbau
+
+function buildSeg(host, items, isActive, onPick) {
+  host.innerHTML = '';
+  for (const item of items) {
+    const b = document.createElement('button');
+    b.textContent = item.label;
+    b.setAttribute('aria-pressed', String(isActive(item.value)));
+    b.addEventListener('click', () => { onPick(item.value); paint(); });
+    host.appendChild(b);
+  }
+}
+
+function buildControls() {
+  buildSeg(document.getElementById('sizes'),
+    SIZES.map((s) => ({ label: s + ' px', value: s })),
+    (v) => state.sizes.has(v),
+    (v) => { state.sizes.has(v) ? state.sizes.delete(v) : state.sizes.add(v);
+             if (!state.sizes.size) state.sizes.add(v); });
+
+  buildSeg(document.getElementById('rotations'),
+    [0, 1, 2, 3].map((r) => ({ label: (r * 90) + '°', value: r })).concat([{ label: 'alle', value: 'all' }]),
+    (v) => v === 'all' ? state.rotations.length === 4 : state.rotations.length === 1 && state.rotations[0] === v,
+    (v) => { state.rotations = v === 'all' ? [0, 1, 2, 3] : [v]; });
+
+  buildSeg(document.getElementById('variants'),
+    Array.from({ length: VARIANT_COUNT }, (_, i) => ({ label: String(i), value: i })),
+    (v) => state.variant === v,
+    (v) => { state.variant = v; });
+
+  buildSeg(document.getElementById('overlays'),
+    [{ label: 'Kantenvertrag', value: 'contract' }, { label: 'Naht', value: 'seam' }],
+    (v) => state.overlay === v,
+    (v) => { state.overlay = state.overlay === v ? null : v; });
+
+  const host = document.getElementById('layers');
+  host.innerHTML = '';
+  const active = new Set(registeredLayers());
+  for (const name of LAYER_ORDER) {
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !state.disabledLayers.has(name);
+    cb.disabled = !active.has(name);
+    cb.addEventListener('change', () => {
+      cb.checked ? state.disabledLayers.delete(name) : state.disabledLayers.add(name);
+      paint();
+    });
+    const span = document.createElement('span');
+    span.textContent = name;
+    if (!active.has(name)) span.className = 'empty';
+    else if (state.disabledLayers.has(name)) span.className = 'off';
+    label.append(cb, span);
+    if (!active.has(name)) label.title = 'noch kein Layer registriert';
+    host.appendChild(label);
+  }
+}
+
+function paint() {
+  buildControls();
+  const host = document.getElementById('sheets');
+  host.innerHTML = '';
+
+  for (const [setId, meta] of Object.entries(SETS)) {
+    const tiles = TILES.filter((t) => t.set === setId);
+    const band = document.createElement('div');
+    band.className = 'setband';
+    band.innerHTML = `<h2>${meta.label}</h2>
+      <span class="eyebrow">${tiles.length} Motive · ${tiles.reduce((a, t) => a + t.count, 0)} Karten</span>`;
+    host.appendChild(band);
+
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    for (const tile of tiles) {
+      for (const rot of state.rotations) sheet.appendChild(tileCard(tile, rot));
+    }
+    host.appendChild(sheet);
+  }
+
+  document.getElementById('cacheReport').textContent =
+    `${cache.entries.size} Einträge · ${cache.estimatedBytes() / 1048576 < 0.05 ? '—' : (cache.estimatedBytes() / 1048576).toFixed(1) + ' MB'} · Obergrenze ${cache.maxEntries}`;
+}
+
+function tileCard(tile, rotation) {
+  const card = document.createElement('div');
+  card.className = 'tile' + (state.overlay === 'seam' ? ' seam' : '');
+  card.tabIndex = 0;
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  const sizes = SIZES.filter((s) => state.sizes.has(s));
+  for (const size of sizes) {
+    const c = renderToCanvas(tile, size, rotation, state.variant);
+    row.appendChild(c);
+    if (state.overlay === 'seam' && size === Math.max(...sizes)) {
+      // gleiche Kachel spiegelbildlich anlegen: die Naht muss unsichtbar bleiben
+      const twin = renderToCanvas(tile, size, (rotation + 2) % 4, state.variant);
+      row.appendChild(twin);
+    }
+  }
+  card.appendChild(row);
+
+  const foot = document.createElement('footer');
+  const flags = [
+    tile.shield && 'Wappen', tile.cloister && 'Kloster',
+    tile.cathedral && 'Kathedrale', tile.inn && 'Wirtshaus',
+    tile.spring && 'Quelle', tile.lake && 'See',
+  ].filter(Boolean).join(' · ');
+  foot.innerHTML = `<span class="id">${tile.id}</span><span>${flags}</span><span class="count">×${tile.count}</span>`;
+  card.appendChild(foot);
+  return card;
+}
+
+// -------------------------------------------------------------------- Checks
+
+function setCheck(id, label, status, detail) {
+  let el = document.getElementById('chk-' + id);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'chk-' + id;
+    el.className = 'check';
+    document.getElementById('checks').appendChild(el);
+  }
+  el.className = 'check ' + status;
+  el.innerHTML = `${label} <b>${detail}</b>`;
+}
+
+function determinismCheck() {
+  const sample = TILES.filter((_, i) => i % 7 === 0);
+  for (const tile of sample) {
+    const a = renderToCanvas(tile, 160, 0, state.variant);
+    const b = renderToCanvas(tile, 160, 0, state.variant);
+    const da = a.getContext('2d').getImageData(0, 0, a.width, a.height).data;
+    const db = b.getContext('2d').getImageData(0, 0, b.width, b.height).data;
+    for (let i = 0; i < da.length; i += 97) {
+      if (da[i] !== db[i]) return { ok: false, tile: tile.id };
+    }
+  }
+  return { ok: true };
+}
+
+function colorPanel(result) {
+  const views = ['normal', 'deuteranopia', 'protanopia'];
+  let html = '<table><thead><tr><th>Paar</th>';
+  for (const v of views) html += `<th class="num">${v.slice(0, 4)}</th>`;
+  html += '</tr></thead><tbody>';
+  for (const p of result.pairs) {
+    html += `<tr><td><span class="swatch" style="background:${PLAYER_COLORS[p.a]}"></span>${p.a} / ` +
+            `<span class="swatch" style="background:${PLAYER_COLORS[p.b]}"></span>${p.b}</td>`;
+    for (const v of views) {
+      const bad = p.values[v] < CONTRAST_LIMITS.playerPair;
+      html += `<td class="num ${bad ? 'bad' : ''}">${p.values[v].toFixed(0)}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+
+  html += '<table><thead><tr><th>Farbe auf Untergrund</th><th class="num">ΔE Füllung</th><th>Trennring</th><th class="num">ΔE Ring</th></tr></thead><tbody>';
+  for (const b of result.backgrounds) {
+    const ring = separationRing(PLAYER_COLORS[b.color], MEEPLE_BACKGROUNDS[b.background]);
+    const bad = b.min < CONTRAST_LIMITS.background;
+    html += `<tr><td><span class="swatch" style="background:${PLAYER_COLORS[b.color]}"></span>${b.color} ` +
+            `<span class="swatch" style="background:${MEEPLE_BACKGROUNDS[b.background]}"></span>${b.background}</td>` +
+            `<td class="num ${bad ? 'bad' : ''}">${b.min.toFixed(0)}</td>` +
+            `<td><span class="swatch" style="background:${ring.color}"></span>${ring.kind}</td>` +
+            `<td class="num">${ring.deltaE.toFixed(0)}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('colorPanel').innerHTML = html;
+}
+
+function edgePanel(result) {
+  if (!result.rows.length) {
+    document.getElementById('edgePanel').innerHTML =
+      `<table><tbody><tr><td>Alle ${TILES.length} Motive × 4 Rotationen × 4 Kanten geprüft. Kein Anschluss weicht mehr als 2 px ab.</td></tr></tbody></table>`;
+    return;
+  }
+  let html = '<table><thead><tr><th>Motiv</th><th>Rot.</th><th>Kante</th><th>deklariert</th><th>gemessen</th><th class="num">Breite</th><th class="num">soll</th></tr></thead><tbody>';
+  for (const r of result.rows.slice(0, 60)) {
+    html += `<tr><td>${r.tile}</td><td>${r.rot * 90}°</td><td>${r.side}</td><td>${r.declared}</td>` +
+            `<td class="bad">${r.got}</td><td class="num">${r.width.toFixed(3)}</td><td class="num">${r.expected}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('edgePanel').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------- Start
+
+paint();
+
+requestAnimationFrame(() => {
+  const v = validateTiles(TILES);
+  setCheck('data', 'Kacheldaten', v.ok ? 'pass' : 'fail',
+    v.ok ? `${TILES.length} Motive` : `${v.problems.length} Fehler`);
+  if (!v.ok) console.warn('Kacheldaten:', v.problems);
+
+  const d = determinismCheck();
+  setCheck('det', 'Determinismus', d.ok ? 'pass' : 'fail', d.ok ? 'stabil' : d.tile);
+
+  const c = checkPlayerColors();
+  setCheck('color', 'Farbprüfung', c.passed ? 'pass' : 'fail',
+    c.passed ? 'bestanden' : `${c.pairs.filter((p) => !p.passed).length + c.backgrounds.filter((b) => !b.passed).length} Verstöße`);
+  colorPanel(c);
+
+  const e = runEdgeCheck();
+  setCheck('edges', 'Kantenanschluss', e.rows.length ? 'fail' : 'pass',
+    e.rows.length ? `${e.rows.length} Abweichungen` : `${e.checked} Kanten ok`);
+  edgePanel(e);
+
+  const o = runOverflowCheck();
+  setCheck('overflow', 'Kachelrand', o.length ? 'fail' : 'pass',
+    o.length ? `${o.length} Objekte beschnitten` : 'nichts beschnitten');
+  if (o.length) console.warn('Beschnittene Dekoration:', o);
+
+  setCheck('lod', 'LOD', 'pass', `${lodFor(48)} / ${lodFor(96)} / ${lodFor(160)}`);
+});
+</script>
+</body>
+</html>

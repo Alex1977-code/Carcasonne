@@ -68,7 +68,8 @@ python3 -m http.server 8080
 ## 🧪 Entwicklung
 
 ```bash
-node tests/engine.test.mjs   # Regel-Engine testen (~1600 Prüfungen)
+node tests/engine.test.mjs         # Regel-Engine (~1670 Prüfungen)
+node tests/tiles-schema.test.mjs   # Kachelschema für den Renderer
 ```
 
 Struktur:
@@ -83,7 +84,28 @@ Struktur:
 | `js/ui/net.js` | Online-Mehrspieler (PeerJS/WebRTC + BroadcastChannel) |
 | `js/ui/main.js` | Bildschirme, Touch-Steuerung, Spielablauf, Speicher |
 | `js/lib/peerjs.min.js` | PeerJS-Bibliothek (MIT-Lizenz, eingebettet) |
-| `tests/` | Engine-Tests (Node, ohne Abhängigkeiten) |
+| `js/ui/render/` | Renderer-Fundament: Zufall, Kantenvertrag, Palette, Layer, Cache |
+| `js/ui/render/adapt-tiles.js` | Adapter Engine-Motive → Renderer-Schema |
+| `debug/gallery.html` | Prüfstand für die Kachelgrafik |
+| `tests/` | Tests (Node, ohne Abhängigkeiten) |
 
 Die Engine ist frei von DOM-Zugriffen und läuft auch in Node – dadurch sind
 Regeln und KI automatisiert testbar.
+
+## 🎨 Renderer-Prüfstand
+
+Unter `debug/gallery.html` liegt ein Prüfstand für die Kachelgrafik: alle 49
+Motive in drei Größen, vier Rotationen und sechs Varianten, mit Layer-Schaltern
+und Überlagerungen für Kantenvertrag und Naht. Oben laufen die Abnahmekriterien
+als Ampel mit (Kacheldaten, Determinismus, Farbprüfung, Kantenanschluss,
+Kachelrand).
+
+```bash
+python3 -m http.server 8080    # dann http://localhost:8080/debug/gallery.html
+```
+
+Die Kacheldaten kommen dabei nicht aus einer zweiten Liste, sondern über
+`js/ui/render/adapt-tiles.js` direkt aus der Engine (`js/engine/tiles.js`) –
+`node tests/tiles-schema.test.mjs` prüft die Übersetzung und lässt
+`validateTiles()` darüber laufen. `docs/SPEC-NACHTRAG.md` beschreibt die
+Regeln, die dabei gelten.
