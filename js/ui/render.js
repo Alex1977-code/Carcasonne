@@ -11,7 +11,8 @@ import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
 import { registerLayer, renderTile } from './render/layers.js';
 import { TileCache } from './render/cache.js';
-import { LOD, LOD_ORDER, lodFor, renderSizeFor, detailLevel, hairline } from './render/contract.js';
+import { LOD, LOD_ORDER, lodFor, renderSizeFor, detailLevel, hairline, EDGE } from './render/contract.js';
+import { variantOf, VARIANT_COUNT } from './render/rng.js';
 
 // ---------- Hilfen ----------
 function mulberry(seed) {
@@ -126,7 +127,7 @@ class BudgetedTileCache extends TileCache {
 }
 
 const tileCache = new BudgetedTileCache({
-  maxEntries: 240,
+  maxEntries: 600,
   maxBytes: 40 * 1024 * 1024,
   budgetPerFrame: 3,
   dpr: Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1),
@@ -166,11 +167,21 @@ function drawTileJob(ctx, job) {
   ctx.restore();
 }
 
+/**
+ * Welche Dekorations-Variante zeigt die Kachel an dieser Stelle?
+ * Die Instanz-Id kommt aus dem Spielzustand (Position auf dem Brett), nie
+ * aus der Renderreihenfolge – nur so sieht die Karte bei allen Mitspielern
+ * gleich aus, auch wenn sie in anderer Reihenfolge gezeichnet wird.
+ */
+export function tileVariantAt(x, y) {
+  return variantOf(`${x},${y}`);
+}
+
 /** Fertiges Bitmap für Motiv/Drehung/Stufe – rendert notfalls sofort. */
-export function tileArt(defId, rot = 0, lod = LOD.LARGE) {
-  const hit = tileCache.get(defId, 0, rot, lod);
+export function tileArt(defId, rot = 0, lod = LOD.LARGE, variant = 0) {
+  const hit = tileCache.get(defId, variant, rot, lod);
   if (hit) return hit;
-  tileCache.request(defId, 0, rot, lod, 100);
+  tileCache.request(defId, variant, rot, lod, 100);
   const budget = tileCache.budgetPerFrame;
   tileCache.budgetPerFrame = 1;
   const wasFrozen = tileCache.frozen;
@@ -178,7 +189,7 @@ export function tileArt(defId, rot = 0, lod = LOD.LARGE) {
   tileCache.drainBudget(drawTileJob);
   tileCache.budgetPerFrame = budget;
   tileCache.frozen = wasFrozen;
-  return tileCache.get(defId, 0, rot, lod);
+  return tileCache.get(defId, variant, rot, lod);
 }
 
 /**
@@ -186,15 +197,15 @@ export function tileArt(defId, rot = 0, lod = LOD.LARGE) {
  * solange eine gröbere gezeigt. Nur wenn gar nichts da ist, wird sofort
  * gerendert – ein leeres Brett wäre schlimmer als ein kurzer Ruckler.
  */
-function tileArtProgressive(defId, rot, lod) {
+function tileArtProgressive(defId, rot, lod, variant = 0) {
   const fallback = LOD_ORDER.filter((l) => l !== lod)
     .sort((a, b) => Math.abs(detailLevel(a) - detailLevel(lod)) - Math.abs(detailLevel(b) - detailLevel(lod)));
-  const best = tileCache.getBestAvailable(defId, 0, rot, lod, fallback);
+  const best = tileCache.getBestAvailable(defId, variant, rot, lod, fallback);
   if (best.canvas) {
-    if (!best.exact) tileCache.request(defId, 0, rot, lod, 5);
+    if (!best.exact) tileCache.request(defId, variant, rot, lod, 5);
     return best.canvas;
   }
-  return tileArt(defId, rot, lod);
+  return tileArt(defId, rot, lod, variant);
 }
 
 // Kachelrand ohne Raster: Ein gerichtetes Relief (hell oben/links, dunkel
@@ -236,6 +247,10 @@ function paintTileBorder(ctx, d) {
   ctx.restore();
 }
 
+// Radius um einen Meeple-Setzpunkt, der frei von unruhigem Dekor bleibt
+// (Regel 7: dort muss der lokale Kontrast niedrig bleiben).
+const MEEPLE_KEEPOUT = 0.13;
+
 // Der Kantenvertrag kennt nur die Sperrzonen an den Kanten. Der Spiel-Renderer
 // weiß genauer, wo Stadtfläche und Wahrzeichen liegen – dieser Ausschluss
 // verhindert Äcker, die halb unter der Stadtmauer oder dem Kloster hervorsehen.
@@ -247,6 +262,8 @@ function fieldAvoider(ctx, d) {
     if (f.t === 'road' && f.inn) {
       spots.push({ x: Math.min(0.8, f.spot[0] + 0.17), y: Math.max(0.2, f.spot[1] - 0.15), r: 0.2 });
     }
+    // Regel 7: wo ein Meeple stehen kann, bleibt der Untergrund ruhig
+    if (f.spot) spots.push({ x: f.spot[0], y: f.spot[1], r: MEEPLE_KEEPOUT });
   }
   if (!regions.length && !spots.length) return null;
   const M = ctx.getTransform();
@@ -290,9 +307,9 @@ registerLayer('ground', (ctx, { tile, rng, lod }) => {
   if (busyness <= 2 && detailLevel(lod) > 0) paintBushes(ctx, streamOf(rng), d);
 }, { minLod: LOD.NORMAL });
 
-registerLayer('water', (ctx, { tile }) => {
+registerLayer('water', (ctx, { tile, rng }) => {
   const d = tile.def;
-  for (const f of d.f) if (f.t === 'river') paintRiver(ctx, d, f);
+  for (const f of d.f) if (f.t === 'river') paintRiver(ctx, d, f, streamOf(rng));
 });
 
 registerLayer('roads', (ctx, { tile, rng }) => {
@@ -462,11 +479,13 @@ function roadPoints(d, f) {
 function paintRoad(ctx, d, f) {
   const pts = roadPoints(d, f);
   const curved = !!f.ctrl || !(f.e.length === 2 && (f.e[0] + 2) % 4 === f.e[1]);
-  strokePass(ctx, pts, curved, 0.2, 'rgba(60,40,15,0.25)');       // weicher Rand
-  strokePass(ctx, pts, curved, 0.165, '#7d6543');                  // Erdkante
-  strokePass(ctx, pts, curved, 0.12, '#e9dcb6');                   // Weg
-  strokePass(ctx, pts, curved, 0.1, '#f2e7c6', null, 0.5);         // Licht
-  strokePass(ctx, pts, curved, 0.02, '#bda379', [0.045, 0.05], 0.9); // Spurrillen/Steine
+  // Fahrbahnbreite exakt nach Kantenvertrag (EDGE.ROAD_WIDTH = 0.14)
+  const W = EDGE.ROAD_WIDTH;
+  strokePass(ctx, pts, curved, W * 1.67, 'rgba(60,40,15,0.25)');   // weicher Rand
+  strokePass(ctx, pts, curved, W * 1.38, '#7d6543');               // Erdkante
+  strokePass(ctx, pts, curved, W, '#e9dcb6');                      // Fahrbahn
+  strokePass(ctx, pts, curved, W * 0.83, '#f2e7c6', null, 0.5);    // Licht
+  strokePass(ctx, pts, curved, W * 0.17, '#bda379', [0.045, 0.05], 0.9); // Spurrillen
   if (f.e.length === 1 && !d.f.some(x => x.t === 'mon') && !d.f.some(x => x.t === 'city') &&
       d.f.filter(x => x.t === 'road').length < 3) {
     const e = roadEndpoint(d, f.e[0]);
@@ -496,7 +515,7 @@ function paintPlaza(ctx, rnd) {
 }
 
 // ----- Fluss -----
-function paintRiver(ctx, d, f) {
+function paintRiver(ctx, d, f, rnd = null) {
   const pts = roadPoints(d, f);
   let curved = !(f.e.length === 2 && (f.e[0] + 2) % 4 === f.e[1]);
   // Fluss weicht einer Stadt auf derselben Karte aus (Bogen ums Ufer)
@@ -505,13 +524,15 @@ function paintRiver(ctx, d, f) {
     pts[1] = [0.5 + (0.5 - city.spot[0]) * 0.55, 0.5 + (0.5 - city.spot[1]) * 0.55];
     curved = true;
   }
-  strokePass(ctx, pts, curved, 0.34, '#cfc39b');                    // Uferband
-  strokePass(ctx, pts, curved, 0.3, 'rgba(90,80,45,0.35)');        // Uferkante
-  strokePass(ctx, pts, curved, 0.26, '#2b5f95');
-  strokePass(ctx, pts, curved, 0.19, '#3d78b0');
-  strokePass(ctx, pts, curved, 0.1, '#5b93c7', null, 0.8);
-  strokePass(ctx, pts, curved, 0.045, '#a7cdEC', [0.07, 0.09], 0.65); // Glanzband
-  const rnd = mulberry(hash(d.id + 'w'));
+  // Wasserbreite exakt nach Kantenvertrag (EDGE.RIVER_WIDTH = 0.18)
+  const W = EDGE.RIVER_WIDTH;
+  strokePass(ctx, pts, curved, W * 1.89, '#cfc39b');               // Uferband
+  strokePass(ctx, pts, curved, W * 1.67, 'rgba(90,80,45,0.35)');   // Uferkante
+  strokePass(ctx, pts, curved, W, '#2b5f95');                      // Wasser
+  strokePass(ctx, pts, curved, W * 0.73, '#3d78b0');
+  strokePass(ctx, pts, curved, W * 0.39, '#5b93c7', null, 0.8);
+  strokePass(ctx, pts, curved, W * 0.17, '#a7cdEC', [0.07, 0.09], 0.65); // Glanzband
+  rnd = rnd || mulberry(hash(d.id + 'w'));
   if (d.riverStart) {
     const [gx, gy] = pts[1];
     const g = ctx.createRadialGradient(gx, gy, 0.01, gx, gy, 0.14);
@@ -613,9 +634,8 @@ function cityPaths(edges) {
 
 const ROOFS = ['#b5502e', '#a34627', '#c2662f', '#8f3d22', '#ad5a35', '#96482a'];
 
-function paintCity(ctx, d, f, rot = 0, rnd = null) {
+function paintCity(ctx, d, f, rot, rnd) {
   const { region, walls } = cityPaths(f.e);
-  rnd = rnd || mulberry(hash(d.id + ':' + f.e.join('')));
   // Grundfläche: warmes Pflaster, flach (siehe paintGrass – kein Raster
   // über Kartengrenzen hinweg)
   ctx.fillStyle = '#c0925b';
@@ -1120,7 +1140,7 @@ export class BoardView {
         scale = 1 + (1 - t) * 0.25;
         ctx.globalAlpha = 0.4 + 0.6 * t;
       }
-      const art = tileArtProgressive(p.defId, p.rot, this.lod);
+      const art = tileArtProgressive(p.defId, p.rot, this.lod, tileVariantAt(p.x, p.y));
       const ds = s * scale;
       ctx.drawImage(art, sx - ds / 2, sy - ds / 2, ds, ds);
       ctx.globalAlpha = 1;
@@ -1148,7 +1168,7 @@ export class BoardView {
       const { x, y, rot, valid } = view.sel;
       const [sx, sy] = this.worldToScreen(x, y);
       ctx.globalAlpha = 0.93;
-      const art = tileArtProgressive(view.sel.defId, rot, this.lod || LOD.NORMAL);
+      const art = tileArtProgressive(view.sel.defId, rot, this.lod || LOD.NORMAL, tileVariantAt(x, y));
       ctx.drawImage(art, sx - s / 2, sy - s / 2, s, s);
       ctx.globalAlpha = 1;
       ctx.lineWidth = 2;
