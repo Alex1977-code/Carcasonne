@@ -23,3 +23,5 @@ jobs:
         run: node tests/tiles-schema.test.mjs
       - name: Farbprüfung (Spielerfarben, Trennring)
         run: node tests/palette.test.mjs
+      - name: Determinismus des Renderers
+        run: node tests/render-determinism.test.mjs
