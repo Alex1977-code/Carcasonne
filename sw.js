@@ -4,7 +4,7 @@
 // liefern und im Hintergrund aktualisieren („stale-while-revalidate“).
 // So bekommen installierte Geräte ohne manuelle Versionspflege immer
 // spätestens beim nächsten Öffnen die neueste Version.
-const CACHE = 'carcassonne-v4';
+const CACHE = 'carcassonne-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -16,6 +16,22 @@ const ASSETS = [
   './js/ui/sound.js',
   './js/ui/net.js',
   './js/ui/main.js',
+  // Zeichenmodule: einzeln auflisten, sonst fehlen sie beim ersten
+  // Offline-Start – nachgeladen werden sie erst beim zweiten Besuch.
+  './js/ui/render/adapt-tiles.js',
+  './js/ui/render/ambience.js',
+  './js/ui/render/backdrop.js',
+  './js/ui/render/base.js',
+  './js/ui/render/buildings.js',
+  './js/ui/render/cache.js',
+  './js/ui/render/contract.js',
+  './js/ui/render/fields.js',
+  './js/ui/render/landmarks.js',
+  './js/ui/render/layers.js',
+  './js/ui/render/meeple-colors.js',
+  './js/ui/render/palette.js',
+  './js/ui/render/rng.js',
+  './js/ui/render/tiles.js',
   './js/lib/peerjs.min.js',
   './manifest.webmanifest',
   './icon.svg',
