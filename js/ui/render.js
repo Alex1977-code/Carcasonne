@@ -11,6 +11,7 @@ import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
 import { PALETTE, shade as pshade, withAlpha } from './render/palette.js';
 import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset } from './render/ambience.js';
+import { paintingFor, loadPaintings, onPaintingLoaded } from './render/paintings.js';
 import { drawTown } from './render/buildings.js';
 import { drawMonastery, drawCathedral } from './render/landmarks.js';
 import { registerLayer, renderTile } from './render/layers.js';
@@ -202,6 +203,22 @@ function tileView(defId) {
 // Transform und klippt bereits auf das Einheitsquadrat).
 function drawTileJob(ctx, job) {
   const view = tileView(job.tileTypeId);
+
+  // Liegt für dieses Motiv eine gemalte Karte vor, ist sie das Bild –
+  // gedreht wie die gezeichnete, sonst stimmten die Ränder nicht.
+  const gemalt = paintingFor(job.tileTypeId);
+  if (gemalt) {
+    ctx.save();
+    ctx.translate(0.5, 0.5);
+    ctx.rotate(job.rotation * Math.PI / 2);
+    ctx.translate(-0.5, -0.5);
+    // Eine Spur über das Einheitsquadrat hinaus: beim Herunterskalieren
+    // franst der äußerste Bildpunkt sonst zur Kachelfuge hin aus.
+    ctx.drawImage(gemalt, -0.004, -0.004, 1.008, 1.008);
+    ctx.restore();
+    return;
+  }
+
   ctx.save();
   // Gedreht wird die Leinwand; die Layer arbeiten dadurch durchgehend im
   // Koordinatensystem der Kartendefinition. canvasRot sagt dem Dekor, wie
@@ -224,6 +241,14 @@ function drawTileJob(ctx, job) {
  * aus der Renderreihenfolge – nur so sieht die Karte bei allen Mitspielern
  * gleich aus, auch wenn sie in anderer Reihenfolge gezeichnet wird.
  */
+// Die gemalten Karten so früh wie möglich anfordern: wer erst beim ersten
+// Zeichnen lädt, zeigt am Anfang durchweg die gezeichnete Fassung und
+// tauscht sie dann sichtbar aus.
+loadPaintings();
+// Trifft eine Malerei nachträglich ein, muss die gezeichnete Fassung aus
+// dem Zwischenspeicher – sonst bliebe sie bis zum Neustart stehen.
+onPaintingLoaded((id) => tileCache.dropMotif(id));
+
 export function tileVariantAt(x, y) {
   return variantOf(`${x},${y}`);
 }

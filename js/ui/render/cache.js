@@ -137,6 +137,18 @@ export class TileCache {
     this.queue.length = 0;
   }
 
+  /**
+   * Alle Einträge eines Motivs verwerfen. Wird gebraucht, wenn die gemalte
+   * Karte nachträglich eintrifft: bis dahin liegt die gezeichnete Fassung
+   * im Speicher und würde sonst bis zum Neustart weiter angezeigt.
+   */
+  dropMotif(tileTypeId) {
+    const praefix = `${tileTypeId}|`;
+    for (const k of [...this.entries.keys()]) {
+      if (k.startsWith(praefix)) this.entries.delete(k);
+    }
+  }
+
   /** Geschätzter Speicherbedarf in MB – Anzeige in der Galerie. */
   estimatedBytes() {
     let bytes = 0;

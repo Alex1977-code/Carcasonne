@@ -4,7 +4,7 @@
 // liefern und im Hintergrund aktualisieren („stale-while-revalidate“).
 // So bekommen installierte Geräte ohne manuelle Versionspflege immer
 // spätestens beim nächsten Öffnen die neueste Version.
-const CACHE = 'carcassonne-v5';
+const CACHE = 'carcassonne-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -29,9 +29,33 @@ const ASSETS = [
   './js/ui/render/landmarks.js',
   './js/ui/render/layers.js',
   './js/ui/render/meeple-colors.js',
+  './js/ui/render/paintings.js',
   './js/ui/render/palette.js',
   './js/ui/render/rng.js',
   './js/ui/render/tiles.js',
+  // Gemalte Karten. Fehlt eine, faellt das Spiel auf die gezeichnete
+  // Darstellung zurueck – deshalb ist die Liste nicht heikel, sie sorgt
+  // nur dafuer, dass offline von Anfang an die Malerei zu sehen ist.
+  './grafik/karten/A.webp',
+  './grafik/karten/B.webp',
+  './grafik/karten/C.webp',
+  './grafik/karten/D.webp',
+  './grafik/karten/E.webp',
+  './grafik/karten/F.webp',
+  './grafik/karten/G.webp',
+  './grafik/karten/H.webp',
+  './grafik/karten/I.webp',
+  './grafik/karten/J.webp',
+  './grafik/karten/K.webp',
+  './grafik/karten/L.webp',
+  './grafik/karten/M.webp',
+  './grafik/karten/N.webp',
+  './grafik/karten/O.webp',
+  './grafik/karten/P.webp',
+  './grafik/karten/Q.webp',
+  './grafik/karten/R.webp',
+  './grafik/karten/S.webp',
+  './grafik/karten/T.webp',
   './js/lib/peerjs.min.js',
   './manifest.webmanifest',
   './icon.svg',
