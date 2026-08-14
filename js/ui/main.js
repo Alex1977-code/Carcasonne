@@ -11,6 +11,8 @@ import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld } from './
 import { sfx, applySoundOptions, unlockAudio, startMusic, stopMusic, soundState } from './sound.js';
 import { Net } from './net.js';
 import { PLAYER_HEXES, PLAYER_NAMES } from './render/meeple-colors.js';
+import { startBackdrop } from './render/backdrop.js';
+import { shadowOffset } from './render/ambience.js';
 
 const $ = (id) => document.getElementById(id);
 // Spielerfarben aus der geprüften Palette (siehe js/ui/render/meeple-colors.js):
@@ -40,10 +42,19 @@ applySoundOptions(options);
 
 // ---------- Screens ----------
 let currentScreen = 'menu';
+
+// Der Tisch liegt hinter allen Bildschirmen. Während der Partie zeichnet das
+// Brett seinen eigenen Tisch, dann pausiert der Hintergrund.
+startBackdrop(document.getElementById('ambient'), {
+  visible: () => currentScreen !== 'game',
+  calm: () => !options.anim,
+  decor: (ctx, w, h, candle) => drawMenuTiles(ctx, w, h, candle),
+});
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   $('screen-' + name).classList.add('active');
   currentScreen = name;
+  document.body.classList.toggle('in-game', name === 'game');
   if (name === 'menu') refreshMenu();
   if (name === 'scores') renderScores();
 }
@@ -85,37 +96,45 @@ $('btnContinue').addEventListener('click', () => {
   startGameUI(s);
 });
 
-// Menü-Hintergrund: schwebende Karten
-(function menuBackground() {
-  const canvas = $('menuBg');
-  const ctx = canvas.getContext('2d');
-  const ids = ['D', 'C', 'V', 'B', 'Q', 'U', 'M', 'E', 'K', 'RV_CURVE'];
-  const tiles = ids.map((id, i) => ({
-    id, rot: i % 4,
-    x: Math.random(), y: Math.random(),
-    vx: (Math.random() - 0.5) * 0.00016, vy: (Math.random() - 0.5) * 0.00016,
-    a: Math.random() * Math.PI * 2, va: (Math.random() - 0.5) * 0.0016,
-    s: 60 + Math.random() * 70,
-  }));
-  function frame() {
-    if (currentScreen !== 'menu') { requestAnimationFrame(frame); return; }
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-    ctx.clearRect(0, 0, w, h);
-    for (const t of tiles) {
-      t.x = (t.x + t.vx + 1) % 1; t.y = (t.y + t.vy + 1) % 1; t.a += t.va;
-      ctx.save();
-      ctx.translate(t.x * w, t.y * h);
-      ctx.rotate(t.a);
-      ctx.globalAlpha = 0.55;
-      const art = tileArt(t.id, t.rot);
-      ctx.drawImage(art, -t.s / 2, -t.s / 2, t.s, t.s);
-      ctx.restore();
-    }
-    requestAnimationFrame(frame);
+// Karten, die im Hauptmenü auf dem Tisch liegen. Sie schweben nicht – sie
+// liegen da, wo jemand sie hingelegt hat, werfen Schatten in die Richtung,
+// in die der Kerzenschein sie wirft, und werden vom selben Licht gedämpft
+// wie der Tisch. Deshalb zeichnet sie der Hintergrund und kein eigenes
+// Canvas darüber: aufgeklebt sähe man sofort.
+//
+// Fest gestreut statt zufällig, damit der Aufbau bei jedem Start gleich
+// aussieht. Die Knöpfe nehmen fast die ganze Breite ein, also bleiben nur
+// der obere und der untere Streifen.
+const MENU_TILES = [
+  { id: 'D',        rot: 1, x: 0.14, y: 0.07, a: -0.22, s: 0.9 },
+  { id: 'C',        rot: 0, x: 0.40, y: 0.04, a:  0.14, s: 0.8 },
+  { id: 'RV_CURVE', rot: 2, x: 0.84, y: 0.09, a:  0.31, s: 0.95 },
+  { id: 'V',        rot: 3, x: 0.06, y: 0.20, a:  0.08, s: 0.75 },
+  { id: 'M',        rot: 0, x: 0.66, y: 0.18, a: -0.18, s: 0.85 },
+  { id: 'B',        rot: 1, x: 0.14, y: 0.85, a:  0.26, s: 0.9 },
+  { id: 'K',        rot: 2, x: 0.87, y: 0.83, a: -0.11, s: 0.8 },
+  { id: 'Q',        rot: 0, x: 0.41, y: 0.95, a:  0.19, s: 0.95 },
+  { id: 'U',        rot: 3, x: 0.72, y: 0.98, a: -0.27, s: 0.85 },
+  { id: 'E',        rot: 1, x: 0.04, y: 0.97, a:  0.05, s: 0.75 },
+];
+
+function drawMenuTiles(ctx, w, h, candle) {
+  if (currentScreen !== 'menu') return;
+  const base = Math.min(w, h) * 0.19;
+  const so = shadowOffset(candle, base * 0.07);
+  for (const t of MENU_TILES) {
+    const size = base * t.s;
+    ctx.save();
+    ctx.translate(t.x * w, t.y * h);
+    ctx.rotate(t.a);
+    ctx.shadowColor = 'rgba(10,5,2,0.6)';
+    ctx.shadowBlur = size * 0.16;
+    ctx.shadowOffsetX = so.x;
+    ctx.shadowOffsetY = so.y;
+    ctx.drawImage(tileArt(t.id, t.rot), -size / 2, -size / 2, size, size);
+    ctx.restore();
   }
-  requestAnimationFrame(frame);
-})();
+}
 
 // ============================================================
 // Setup-Screen
@@ -166,7 +185,7 @@ function renderPlayerRows() {
     name.placeholder = 'Name';
     name.addEventListener('input', () => { p.name = name.value; });
     const type = document.createElement('select');
-    [['human', '👤 Mensch'], ['ai1', '🤖 KI leicht'], ['ai2', '🤖 KI mittel'], ['ai3', '🤖 KI schwer']]
+    [['human', 'Mensch'], ['ai1', 'KI leicht'], ['ai2', 'KI mittel'], ['ai3', 'KI schwer']]
       .forEach(([v, label]) => {
         const o = document.createElement('option');
         o.value = v; o.textContent = label;
@@ -198,7 +217,7 @@ function renderPlayerRows() {
       name.readOnly = true;
       const tag = document.createElement('span');
       tag.className = 'remote-tag';
-      tag.textContent = '🌐 online';
+      tag.textContent = 'online';
       row.append(dot, name, tag);
       wrap.appendChild(row);
     });
@@ -441,7 +460,7 @@ function wireGuestNet(net) {
         dot.style.background = r.color;
         const nm = document.createElement('span');
         nm.textContent = r.name + (i === msg.you ? ' (du)' : '') +
-          (r.kind === 'ai' ? ' 🤖' : r.kind === 'remote' && i !== msg.you ? ' 🌐' : '');
+          (r.kind === 'ai' ? ' (KI)' : r.kind === 'remote' && i !== msg.you ? ' (online)' : '');
         li.append(dot, nm);
         ul.appendChild(li);
       });
@@ -616,7 +635,8 @@ function updateHud() {
   const pl = G.players[G.current];
   $('btnBigMeeple').classList.toggle('hidden', !(meeplePhase && pl.bigMeeples > 0 && pl.meeples > 0));
   $('btnBigMeeple').classList.toggle('on', ui.bigNext);
-  $('btnMute').textContent = (soundState.sfx || soundState.music) ? '🔊' : '🔇';
+  $('btnMute').textContent = '♫';
+  $('btnMute').classList.toggle('muted', !(soundState.sfx || soundState.music));
 }
 
 const isHumanTurn = () => G && G.phase !== 'over' && G.players[G.current].type === 'human';
@@ -659,6 +679,7 @@ function startLoop() {
       floaters: ui.floaters,
       lastPlaced: ui.lastPlaced,
       anim: options.anim ? ui.anim : null,
+      calm: !options.anim,      // ohne Animationen brennt die Kerze ruhig
     };
     board.render(G, view);
     ui.floaters = ui.floaters.filter(f => now - f.t0 < 1700);
@@ -684,7 +705,7 @@ function processEvents(events) {
       toast('Karte passt nirgendwo – abgeworfen', '#93a0b4');
     } else if (ev.type === 'bonus') {
       const p = G.players[ev.players[0]];
-      toast(`${p.name}: +${ev.points} (${ev.kind === 'king' ? '👑 König' : '🗡️ Räuber'})`, p.color);
+      toast(`${p.name}: +${ev.points} (${ev.kind === 'king' ? 'König' : 'Räuber'})`, p.color);
     }
   }
   if (scored) sfx.score(Math.max(...events.filter(e => e.type === 'score').map(e => e.points), 0));
@@ -715,7 +736,7 @@ function nextTurnFlow(first = false) {
     updateHud();
   } else if (cur.type === 'remote') {
     showTurnBanner();
-    setNetStatus(`🌐 Warte auf ${cur.name}…`);
+    setNetStatus(`Warte auf ${cur.name}…`);
     updateHud();
     pumpNet();
   } else {
@@ -1010,11 +1031,11 @@ function showEndScreen() {
   const sorted = [...G.players].sort((a, b) => b.score - a.score);
   const winners = G.winners.map(i => G.players[i].name);
   $('endWinner').textContent =
-    winners.length > 1 ? `Unentschieden: ${winners.join(' & ')}!` : `🏆 ${winners[0]} gewinnt!`;
-  const medals = ['🥇', '🥈', '🥉'];
+    winners.length > 1 ? `Unentschieden: ${winners.join(' & ')}!` : `${winners[0]} gewinnt!`;
+  const medals = ['I.', 'II.', 'III.'];
   const t = $('endTable');
   t.innerHTML = `
-    <thead><tr><th>Spieler</th><th title="Straßen">🛤</th><th title="Städte">🏰</th><th title="Klöster">⛪</th><th title="Wiesen">🌾</th><th title="Bonus">✨</th><th>Punkte</th></tr></thead>
+    <thead><tr><th>Spieler</th><th>Straße</th><th>Stadt</th><th>Kloster</th><th>Wiese</th><th>Bonus</th><th>Punkte</th></tr></thead>
     <tbody>${sorted.map((p, i) => `
       <tr>
         <td><span class="pname"><span class="dot" style="background:${p.color}"></span>${medals[i] || ''} ${esc(p.name)}</span></td>
@@ -1094,7 +1115,7 @@ function renderScores() {
     const li = document.createElement('li');
     li.innerHTML = `
       <span class="rank">${i + 1}</span>
-      <span class="who"><b>${esc(s.name)} ${s.won ? '👑' : ''}</b>
+      <span class="who"><b>${esc(s.name)} ${s.won ? '⚜' : ''}</b>
       <em>${s.date} · ${s.players} Spieler · ${esc(s.tag)}</em></span>
       <span class="pts">${s.score}</span>`;
     list.appendChild(li);

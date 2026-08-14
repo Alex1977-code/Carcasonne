@@ -10,6 +10,7 @@ import { drawFields } from './render/fields.js';
 import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
 import { PALETTE, shade as pshade, withAlpha } from './render/palette.js';
+import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset } from './render/ambience.js';
 import { drawTown } from './render/buildings.js';
 import { drawMonastery, drawCathedral } from './render/landmarks.js';
 import { registerLayer, renderTile } from './render/layers.js';
@@ -1365,31 +1366,32 @@ export class BoardView {
     ctx.save();
     ctx.scale(this.dpr, this.dpr);
 
-    // Holztisch
-    ctx.save();
-    const off = 360;
-    ctx.translate(((-this.cam.x * this.cam.scale) % off), ((-this.cam.y * this.cam.scale) % off));
-    ctx.fillStyle = woodPattern(ctx);
-    ctx.fillRect(-off, -off, r.width + 2 * off, r.height + 2 * off);
-    ctx.restore();
-    // warmes Licht + Vignette
-    const light = ctx.createRadialGradient(r.width / 2, r.height * 0.38, 40, r.width / 2, r.height / 2, Math.max(r.width, r.height) * 0.85);
-    light.addColorStop(0, 'rgba(255,225,170,0.10)');
-    light.addColorStop(0.55, 'rgba(0,0,0,0)');
-    light.addColorStop(1, 'rgba(0,0,0,0.34)');
-    ctx.fillStyle = light;
-    ctx.fillRect(0, 0, r.width, r.height);
-
     const s = this.cam.scale;
     const now = view.now || 0;
+    // Die Kerze ist nicht im Bild, ihr Schein aber immer in Bewegung.
+    // Bei abgeschalteten Animationen brennt sie ruhig weiter.
+    const candle = candleAt(now, view.calm);
+    this.candle = candle;
 
-    // weiche Schatten
+    // Eichentisch: die Textur wandert mit der Kamera, damit das Brett
+    // wirklich auf dem Tisch zu liegen scheint und nicht darüber schwebt.
+    paintTable(
+      ctx, r.width, r.height,
+      -this.cam.x * this.cam.scale * 0.12,
+      -this.cam.y * this.cam.scale * 0.12,
+    );
+    // Wachsglanz auf dem blanken Holz – muss unter die Kacheln, sonst
+    // glänzt auch die Pappe.
+    paintSheen(ctx, r.width, r.height, candle);
+
+    // Kachelschatten: Länge und Richtung folgen dem Kerzenschein
     const sh = makeShadowSprite();
     const shScale = s / 80;
+    const so = shadowOffset(candle, s * 0.055);
     for (const [, idx] of state.grid) {
       const p = state.placed[idx];
       const [sx, sy] = this.worldToScreen(p.x, p.y);
-      ctx.drawImage(sh, sx - 72 * shScale, sy - 72 * shScale, 144 * shScale, 144 * shScale);
+      ctx.drawImage(sh, sx - 72 * shScale + so.x, sy - 72 * shScale + so.y, 144 * shScale, 144 * shScale);
     }
     // Karten – Detailstufe folgt der Bildschirmgröße, mit Hysterese
     this.lod = lodFor(s * this.dpr, this.lod);
@@ -1470,6 +1472,10 @@ export class BoardView {
         drawMeeple(ctx, sx, sy, s * 0.2, spot.color, { shadow: false });
       }
     }
+
+    // Kerzenschein über die ganze Szene – erst hier, damit auch die
+    // Kacheln im Licht liegen und die Ränder wirklich dunkel werden.
+    paintCandleLight(ctx, r.width, r.height, candle);
 
     // Punkte-Floater
     if (view.floaters) {
