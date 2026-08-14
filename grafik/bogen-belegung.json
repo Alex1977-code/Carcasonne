@@ -1,0 +1,47 @@
+{
+  "_": [
+    "Welches Motiv steht auf welchem Bogen. Die Bögen sind 2×2 belegt,",
+    "die Reihenfolge ist: 0 oben links, 1 oben rechts, 2 unten links,",
+    "3 unten rechts.",
+    "",
+    "'id' ist das Motiv aus js/engine/tiles.js. 'dreh' sagt, wie oft die",
+    "Malerei im Uhrzeigersinn gedreht werden muss, damit ihre Ränder zur",
+    "Kantenfolge der Definition passen (0–3). Die Drehung wird beim",
+    "Schneiden eingerechnet, im Spiel liegen alle Karten dann so herum",
+    "wie ihre Definition.",
+    "",
+    "Neue Bögen: hier eintragen und tools/kacheln-schneiden.mjs laufen",
+    "lassen. Fehlende Motive fallen im Spiel auf die gezeichnete",
+    "Darstellung zurück."
+  ],
+  "bogen01_generiert.png": [
+    { "id": "A", "dreh": 0 },
+    { "id": "B", "dreh": 0 },
+    { "id": "C", "dreh": 0 },
+    { "id": "D", "dreh": 0 }
+  ],
+  "bogen02_generiert.png": [
+    { "id": "E", "dreh": 0 },
+    { "id": "F", "dreh": 0 },
+    { "id": "H", "dreh": 0 },
+    { "id": "G", "dreh": 0 }
+  ],
+  "bogen03_generiert.png": [
+    { "id": "I", "dreh": 1 },
+    { "id": "J", "dreh": 0 },
+    { "id": "K", "dreh": 0 },
+    { "id": "L", "dreh": 0 }
+  ],
+  "bogen04_generiert.png": [
+    { "id": "M", "dreh": 0 },
+    { "id": "N", "dreh": 0 },
+    { "id": "O", "dreh": 0 },
+    { "id": "P", "dreh": 0 }
+  ],
+  "bogen05_generiert.png": [
+    { "id": "Q", "dreh": 0 },
+    { "id": "R", "dreh": 0 },
+    { "id": "S", "dreh": 0 },
+    { "id": "T", "dreh": 0 }
+  ]
+}
