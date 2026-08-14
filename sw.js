@@ -4,7 +4,7 @@
 // liefern und im Hintergrund aktualisieren („stale-while-revalidate“).
 // So bekommen installierte Geräte ohne manuelle Versionspflege immer
 // spätestens beim nächsten Öffnen die neueste Version.
-const CACHE = 'carcassonne-v6';
+const CACHE = 'carcassonne-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -59,6 +59,9 @@ const ASSETS = [
   './js/lib/peerjs.min.js',
   './manifest.webmanifest',
   './icon.svg',
+  './icons/icon-180.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', (e) => {
