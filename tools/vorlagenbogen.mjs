@@ -19,9 +19,10 @@
  * Konstruktion mittig und 14 % breit, Flüsse mittig und 18 %, Städte über
  * die volle Kante.
  *
- * Einschränkung: für Motive, die bereits gemalt vorliegen, liefert
- * tileArt die Malerei statt der Zeichnung. Als Vorlage taugt das nicht –
- * gebraucht wird sie ohnehin nur für die noch fehlenden Motive.
+ * Die gemalten Karten werden dabei absichtlich nicht ausgeliefert, damit
+ * auch für bereits gemalte Motive die Zeichnung herauskommt und nicht die
+ * Malerei – eine Vorlage soll die Geometrie vorgeben, nicht das Bild, das
+ * gerade ersetzt werden soll.
  */
 
 import { execSync } from 'node:child_process';
@@ -65,6 +66,11 @@ const TYPEN = { '.js': 'text/javascript', '.mjs': 'text/javascript',
                 '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp' };
 const server = createServer((req, res) => {
   const p = join(ROOT, decodeURIComponent(req.url.split('?')[0]));
+  // Gemalte Karten werden bewusst nicht ausgeliefert. Sonst liefert
+  // tileArt für bereits gemalte Motive die Malerei statt der Zeichnung –
+  // und als Vorlage taugt die Malerei nicht, sie soll ja ersetzt werden.
+  // Ohne Bild fällt das Spiel von selbst auf die Zeichnung zurück.
+  if (req.url.startsWith('/grafik/karten/')) { res.writeHead(404); res.end(); return; }
   // Erst lesen, dann den Kopf schreiben: andersherum sind die Kopfzeilen
   // schon raus, wenn das Lesen fehlschlaegt, und der 404 wirft.
   let inhalt;

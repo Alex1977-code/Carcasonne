@@ -184,8 +184,12 @@ karten.forEach((k, q) => {
   for (const u of k.uebergaenge) {
     const sollB = u.art === 'R' ? 11 : 18;
     const dm = Math.abs(u.mitte - 50), db = sollB - u.breite;
+    // In beide Richtungen prüfen. Vorher wurde nur „zu schmal" beanstandet –
+    // deshalb sind U, W und X von Bogen 07 durchgerutscht: ihre Wege waren
+    // 11,8 bis 13,8 % breit statt 11 %, und im Bild fällt das nicht auf.
     const anm = dm > 3 ? `✗ ${dm.toFixed(1)} % aus der Mitte`
       : db > 2.5 ? `✗ ${db.toFixed(1)} % zu schmal`
+      : db < -2.5 ? `✗ ${(-db).toFixed(1)} % zu breit`
       : '✓';
     if (anm !== '✓') fehler++;
     console.log(`   ${u.seite}  ${(u.art === 'R' ? 'Weg' : 'Fluss').padEnd(6)}` +
