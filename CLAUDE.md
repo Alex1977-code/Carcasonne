@@ -15,13 +15,27 @@ verwendet wird und welches nicht.
 Ein Prompt pro **Bogen**, nicht pro Karte — ein Bogen ist ein Bild mit vier
 Karten im 2×2-Raster.
 
-## Herkunft der Bögen 01–06
+## Wie die Bögen entstehen: zwei Bilder, nicht nur Text
 
-Diese Bögen wurden ohne Beteiligung dieses Projekts erzeugt; die Prompts
-dazu liegen nicht vor. Stil und Maße in `grafik/PROMPTS.md` sind aus den
-Bildern **gemessen**, nicht aus den Originalprompts übernommen. Wenn die
-Originalprompts auftauchen, sind sie die bessere Grundlage — sie haben
-nachweislich Karten erzeugt, die den Randvertrag einhalten.
+Die Bögen 01–06 wurden mit **zwei angehängten Bildern** erzeugt:
+
+* **Bild 1, der Vorlagenbogen** — gibt Inhalt und Geometrie vor.
+  *„Image 1 — the sheet. This defines the content and the geometry."*
+* **Bild 2, die Referenzplatte** — gibt ausschließlich das Material vor.
+  *„This is a MATERIAL SAMPLE ONLY."*
+
+Das ist der Grund, warum dort die Wege in der Kantenmitte sitzen. Aus dem
+Wort „mittig" macht ein Bildmodell 36 % oder 58 %; aus einem Bild nicht.
+Die Bögen 07–14, die allein aus Text erzeugt wurden, sind genau daran
+gescheitert: 24 von 40 Übergängen lagen daneben.
+
+Vorlagenbogen erzeugt `tools/vorlagenbogen.mjs` aus der gezeichneten
+Darstellung des Spiels — die hält den Randvertrag nicht nur ein, sie *ist*
+er. Die Referenzplatte liegt als `grafik/vorlagen/referenzplatte.png`
+(Motiv A aus Bogen 01).
+
+Der Prompttext beschreibt dann nur noch Material, Farbbedeutung und die
+Kantenzuweisung je Karte — nie die Geometrie.
 
 ## Der Randvertrag ist die harte Bedingung
 
