@@ -17,8 +17,15 @@
 // passen; die Liste steht hier ausgeschrieben, damit der Ladevorgang
 // nicht auf 49 fehlschlagende Anfragen läuft.
 export const GEMALT = [
+  // Grundspiel, vollständig bis auf die vier reinen Straßenkarten U V W X
   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
   'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+  // Fluss
+  'RV_CITY2', 'RV_CURVE', 'RV_LAKE', 'RV_SPRING',
+  'RV_STRAIGHT',
+  // Wirtshäuser & Kathedralen
+  'EC_CATH', 'EC_CITY_FULL', 'EC_CITY_GATE',
+  'EC_INN_STRAIGHT', 'EC_MON_ROAD2',
 ];
 
 const bilder = new Map();

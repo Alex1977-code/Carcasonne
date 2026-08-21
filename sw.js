@@ -4,7 +4,7 @@
 // liefern und im Hintergrund aktualisieren („stale-while-revalidate“).
 // So bekommen installierte Geräte ohne manuelle Versionspflege immer
 // spätestens beim nächsten Öffnen die neueste Version.
-const CACHE = 'carcassonne-v7';
+const CACHE = 'carcassonne-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -41,6 +41,11 @@ const ASSETS = [
   './grafik/karten/C.webp',
   './grafik/karten/D.webp',
   './grafik/karten/E.webp',
+  './grafik/karten/EC_CATH.webp',
+  './grafik/karten/EC_CITY_FULL.webp',
+  './grafik/karten/EC_CITY_GATE.webp',
+  './grafik/karten/EC_INN_STRAIGHT.webp',
+  './grafik/karten/EC_MON_ROAD2.webp',
   './grafik/karten/F.webp',
   './grafik/karten/G.webp',
   './grafik/karten/H.webp',
@@ -54,6 +59,11 @@ const ASSETS = [
   './grafik/karten/P.webp',
   './grafik/karten/Q.webp',
   './grafik/karten/R.webp',
+  './grafik/karten/RV_CITY2.webp',
+  './grafik/karten/RV_CURVE.webp',
+  './grafik/karten/RV_LAKE.webp',
+  './grafik/karten/RV_SPRING.webp',
+  './grafik/karten/RV_STRAIGHT.webp',
   './grafik/karten/S.webp',
   './grafik/karten/T.webp',
   './js/lib/peerjs.min.js',
