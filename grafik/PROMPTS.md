@@ -23,9 +23,9 @@ Bogen 03 und 06 sind byte-identisch; Bogen 06 ist eine Dublette.
 
 | Bogen | Motive | Vorlage | Wirkung |
 |---|---|---|---|
-| **15** | EC_INN_CURVE · EC_DOUBLE_CURVE · EC_DOUBLE_CURVE2 | `vorlagen/bogen15-vorlage.png` | Wirtshäuser, alle Kurven |
+| **15** | EC_INN_CURVE · EC_INN_TJUNC · EC_DOUBLE_CURVE · EC_DOUBLE_CURVE2 | `vorlagen/bogen15-vorlage.png` | reine Wegkarten, keine Stadt |
 | 16 | RV_BRIDGE · RV_CITY · RV_MON · RV_ROADCURVE | `vorlagen/bogen16-vorlage.png` | schließt den Fluss ab |
-| 17 | EC_INN_TJUNC · EC_INN_CITYCURVE · EC_INN_CITYSTRAIGHT · EC_CITY_DIAG | `vorlagen/bogen17-vorlage.png` | Wirtshäuser |
+| 17 | EC_INN_CITYCURVE · EC_INN_CITYSTRAIGHT · EC_CITY_DIAG | `vorlagen/bogen17-vorlage.png` | Stadt mit Weg, nur drei Karten |
 | 18 | EC_TRIPLE_CITY · EC_CITY_ROADPASS · EC_CROSS_CITY · EC_CITY_3SHIELD | `vorlagen/bogen18-vorlage.png` | Kathedralen |
 
 Das Grundspiel braucht keinen Bogen mehr. Seine letzte Lücke, die
