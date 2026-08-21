@@ -4,7 +4,7 @@
 // liefern und im Hintergrund aktualisieren („stale-while-revalidate“).
 // So bekommen installierte Geräte ohne manuelle Versionspflege immer
 // spätestens beim nächsten Öffnen die neueste Version.
-const CACHE = 'carcassonne-v8';
+const CACHE = 'carcassonne-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -66,6 +66,9 @@ const ASSETS = [
   './grafik/karten/RV_STRAIGHT.webp',
   './grafik/karten/S.webp',
   './grafik/karten/T.webp',
+  './grafik/karten/U.webp',
+  './grafik/karten/W.webp',
+  './grafik/karten/X.webp',
   './js/lib/peerjs.min.js',
   './manifest.webmanifest',
   './icon.svg',

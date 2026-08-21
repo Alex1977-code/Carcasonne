@@ -17,9 +17,10 @@
 // passen; die Liste steht hier ausgeschrieben, damit der Ladevorgang
 // nicht auf 49 fehlschlagende Anfragen läuft.
 export const GEMALT = [
-  // Grundspiel, vollständig bis auf die vier reinen Straßenkarten U V W X
+  // Grundspiel – vollständig bis auf V, die Straßenkurve
   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
   'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+  'U', 'W', 'X',
   // Fluss
   'RV_CITY2', 'RV_CURVE', 'RV_LAKE', 'RV_SPRING',
   'RV_STRAIGHT',

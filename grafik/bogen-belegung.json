@@ -104,6 +104,21 @@
       "dreh": 0
     }
   ],
+  "bogen07_generiert.png": [
+    {
+      "id": "U",
+      "dreh": 0
+    },
+    null,
+    {
+      "id": "W",
+      "dreh": 0
+    },
+    {
+      "id": "X",
+      "dreh": 0
+    }
+  ],
   "bogen08_generiert.png": [
     {
       "id": "RV_SPRING",
