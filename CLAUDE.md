@@ -53,6 +53,19 @@ Deshalb wird jeder neue Bogen vor der Übernahme **gemessen**, nicht
 angesehen: `tools/kacheln-schneiden.mjs` schneidet, die Messung sitzt in der
 Prüfroutine daneben.
 
+## Jeden neuen Bogen erst messen
+
+    node tools/bogen-pruefen.mjs <bild.png> U V W X
+
+Meldet je Karte die tatsächliche Kantenfolge, ob sie zum genannten Motiv
+passt (notfalls gedreht), und für jeden Weg und Fluss die Lage und Breite
+an der Kante. Beanstandungen gehen mit Rückgabewert 1 raus.
+
+**Nie nach Augenschein entscheiden.** Ein Weg, der bei 44 % statt 50 %
+austritt, sieht in der Vorschau tadellos aus. Von den 40 Übergängen der
+ersten Lieferung 07–14 lagen 24 daneben, und im Bild war keiner davon
+aufgefallen.
+
 ## Neue Bögen einbauen
 
 1. Datei nach `grafik/`
