@@ -1,6 +1,7 @@
 # Die fehlenden Kartenbögen
 
-**20 von 49 Motiven sind gemalt. Es fehlen 29.**
+**34 von 49 Motiven sind gemalt. Es fehlen 15 — das Grundspiel ist
+vollständig.**
 
 Hier steht für jeden fehlenden Bogen **ein vollständiger Prompt** — Stil,
 Format, Maße und alle vier Karten in einem Block, direkt zum Einfügen. Dazu
@@ -8,17 +9,28 @@ für jeden Bogen, welches vorhandene Bild als Referenz taugt und welches nicht.
 
 Bogen 03 und 06 sind byte-identisch; Bogen 06 ist eine Dublette.
 
+> **Die Bögen 07 bis 14 weiter unten sind der gescheiterte Versuch.** Sie
+> waren rein über Text beschrieben. Gemessen lagen 24 von 40 Kantenübergängen
+> daneben — aus „mittig" macht ein Bildmodell 36 % oder 58 %. Sie stehen hier
+> nur noch als Materialbeschreibung. Neue Bögen werden mit einem
+> **Vorlagenbild** erzeugt: `tools/vorlagenbogen.mjs` zeichnet die Geometrie
+> aus dem Spiel selbst, der Text beschreibt nur noch Material und Farbe. So
+> sind die Bögen 01 bis 05 entstanden, und deren Kanten stimmen.
+
 ---
 
 ## Reihenfolge
 
-| Bogen | Motive | Wirkung |
-|---|---|---|
-| **07** | U · V · W · X | **Zuerst.** 22 der 72 Grundkarten. |
-| 08–10 | Fluss, 9 Motive | nur mit Flusserweiterung |
-| 10–14 | Wirtshäuser & Kathedralen, 16 Motive | nur mit dieser Erweiterung |
+| Bogen | Motive | Vorlage | Wirkung |
+|---|---|---|---|
+| **15** | EC_INN_CURVE · EC_DOUBLE_CURVE · EC_DOUBLE_CURVE2 | `vorlagen/bogen15-vorlage.png` | Wirtshäuser, alle Kurven |
+| 16 | RV_BRIDGE · RV_CITY · RV_MON · RV_ROADCURVE | `vorlagen/bogen16-vorlage.png` | schließt den Fluss ab |
+| 17 | EC_INN_TJUNC · EC_INN_CITYCURVE · EC_INN_CITYSTRAIGHT · EC_CITY_DIAG | `vorlagen/bogen17-vorlage.png` | Wirtshäuser |
+| 18 | EC_TRIPLE_CITY · EC_CITY_ROADPASS · EC_CROSS_CITY · EC_CITY_3SHIELD | `vorlagen/bogen18-vorlage.png` | Kathedralen |
 
-Wer nur Bogen 07 macht, hat das Grundspiel vollständig gemalt.
+Das Grundspiel braucht keinen Bogen mehr. Seine letzte Lücke, die
+Straßenkurve V, ist nicht gemalt, sondern gebaut: `tools/v-aus-k.mjs` nimmt
+die bereits vermessene Kurve von Motiv K und ersetzt die Stadt durch Wiese.
 
 ---
 
