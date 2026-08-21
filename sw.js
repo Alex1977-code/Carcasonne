@@ -4,7 +4,7 @@
 // liefern und im Hintergrund aktualisieren („stale-while-revalidate“).
 // So bekommen installierte Geräte ohne manuelle Versionspflege immer
 // spätestens beim nächsten Öffnen die neueste Version.
-const CACHE = 'carcassonne-v10';
+const CACHE = 'carcassonne-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -42,10 +42,20 @@ const ASSETS = [
   './grafik/karten/D.webp',
   './grafik/karten/E.webp',
   './grafik/karten/EC_CATH.webp',
+  './grafik/karten/EC_CITY_3SHIELD.webp',
+  './grafik/karten/EC_CITY_DIAG.webp',
   './grafik/karten/EC_CITY_FULL.webp',
   './grafik/karten/EC_CITY_GATE.webp',
+  './grafik/karten/EC_CITY_ROADPASS.webp',
+  './grafik/karten/EC_CROSS_CITY.webp',
+  './grafik/karten/EC_DOUBLE_CURVE.webp',
+  './grafik/karten/EC_DOUBLE_CURVE2.webp',
+  './grafik/karten/EC_INN_CITYSTRAIGHT.webp',
+  './grafik/karten/EC_INN_CURVE.webp',
   './grafik/karten/EC_INN_STRAIGHT.webp',
+  './grafik/karten/EC_INN_TJUNC.webp',
   './grafik/karten/EC_MON_ROAD2.webp',
+  './grafik/karten/EC_TRIPLE_CITY.webp',
   './grafik/karten/F.webp',
   './grafik/karten/G.webp',
   './grafik/karten/H.webp',
@@ -59,9 +69,11 @@ const ASSETS = [
   './grafik/karten/P.webp',
   './grafik/karten/Q.webp',
   './grafik/karten/R.webp',
+  './grafik/karten/RV_BRIDGE.webp',
   './grafik/karten/RV_CITY2.webp',
   './grafik/karten/RV_CURVE.webp',
   './grafik/karten/RV_LAKE.webp',
+  './grafik/karten/RV_ROADCURVE.webp',
   './grafik/karten/RV_SPRING.webp',
   './grafik/karten/RV_STRAIGHT.webp',
   './grafik/karten/S.webp',

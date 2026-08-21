@@ -66,6 +66,35 @@ austritt, sieht in der Vorschau tadellos aus. Von den 40 Übergängen der
 ersten Lieferung 07–14 lagen 24 daneben, und im Bild war keiner davon
 aufgefallen.
 
+## Einzelkarten statt Bögen
+
+Kommt die Lieferung als **eine Datei je Motiv** statt als 2×2-Bogen, gilt
+derselbe Ablauf mit anderen Werkzeugen:
+
+    node tools/karten-pruefen.mjs grafik/*.png      # messen
+    node tools/karten-einbauen.mjs grafik/*.png     # zuschneiden, 512 px, WebP
+    node tools/karten-pruefen.mjs grafik/karten/*.webp   # danach noch einmal
+
+Das Motiv kommt aus dem Dateinamen: `EC_CATH.png` ergibt EC_CATH,
+`U_strasse-gerade.png` ergibt U. Nach dem Einbau noch einmal messen — der
+Zuschnitt verschiebt die Maße geringfügig.
+
+Drei Dinge, die dabei aufgefallen sind und wiederkommen werden:
+
+* **Verzogene Karten.** Manche Lieferungen sind keine flachen Quadrate,
+  sondern gewölbte Objekte mit grauem Hintergrund in den Ecken. Am
+  Kontaktbogen sofort zu sehen, in der Einzelansicht leicht zu übersehen.
+  Die gehören neu gemalt, nicht beschnitten.
+* **Abgerundete Ecken.** Ein grauer Zwickel in jeder Ecke, den die
+  zeilenweise Randsuche nicht findet, weil sie nur die mittleren achtzig
+  Prozent jeder Kante abtastet. `karten-einbauen.mjs` tastet deshalb
+  zusätzlich diagonal von den Ecken, gedeckelt bei 2 %.
+* **Goldene Wege.** Wo der Weg statt Elfenbein ein warmes Creme ist, kippt
+  er im Klassifikator stellenweise nach Stadt, und dann meldet das
+  Werkzeug „kein Weg an der Kante". Widerspricht eine einzelne Kante dem
+  Bild, ist es meistens das. Die Schwelle steht in `karten-pruefen.mjs`
+  bei einer Sättigung von 0,45.
+
 ## Neue Bögen einbauen
 
 1. Datei nach `grafik/`

@@ -21,12 +21,15 @@ export const GEMALT = [
   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
   'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
   'U', 'V', 'W', 'X',
-  // Fluss
-  'RV_CITY2', 'RV_CURVE', 'RV_LAKE', 'RV_SPRING',
-  'RV_STRAIGHT',
-  // Wirtshäuser & Kathedralen
-  'EC_CATH', 'EC_CITY_FULL', 'EC_CITY_GATE',
-  'EC_INN_STRAIGHT', 'EC_MON_ROAD2',
+  // Fluss – 7 von 9
+  'RV_BRIDGE', 'RV_CITY2', 'RV_CURVE', 'RV_LAKE',
+  'RV_ROADCURVE', 'RV_SPRING', 'RV_STRAIGHT',
+  // Wirtshäuser & Kathedralen – 15 von 16
+  'EC_CATH', 'EC_CITY_3SHIELD', 'EC_CITY_DIAG',
+  'EC_CITY_FULL', 'EC_CITY_GATE', 'EC_CITY_ROADPASS',
+  'EC_CROSS_CITY', 'EC_DOUBLE_CURVE', 'EC_DOUBLE_CURVE2',
+  'EC_INN_CITYSTRAIGHT', 'EC_INN_CURVE', 'EC_INN_STRAIGHT',
+  'EC_INN_TJUNC', 'EC_MON_ROAD2', 'EC_TRIPLE_CITY',
 ];
 
 const bilder = new Map();
