@@ -1478,21 +1478,36 @@ export class BoardView {
       }
     }
 
-    // Meeple-Auswahlpunkte
+    // Meeple-Auswahlpunkte.
+    //
+    // Die Scheibe trägt die Farbe des Bauteils, auf das der Gefolgsmann
+    // käme. Vorher war jede Marke gleich weiß, und dann ist nicht zu
+    // erkennen, welche für die Stadt und welche für die Wiese steht –
+    // schlimmer noch: auf Motiv F liegen alle drei Punkte übereinander in
+    // der Mittelspalte, die mittlere davon auf dem Stadtband, und die
+    // weiße Scheibe verdeckt genau die Stadt, für die sie steht.
     if (view.meepleSpots) {
       for (const spot of view.meepleSpots) {
         const [sx, sy] = this.worldToScreen(spot.wx, spot.wy);
         const pulse = 1 + 0.08 * Math.sin(now / 250 + sx);
+        const f = SPOT_FARBEN[spot.t] || SPOT_FARBEN.field;
         ctx.beginPath();
         ctx.arc(sx, sy + 2, s * 0.17 * pulse, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(10,10,20,0.35)';
         ctx.fill();
         ctx.beginPath();
         ctx.arc(sx, sy, s * 0.17 * pulse, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillStyle = f.fuell;
         ctx.fill();
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = 'rgba(40,40,60,0.85)';
+        // Heller Innenring: hebt die Marke von der Karte ab, auch wenn sie
+        // in derselben Farbe darauf liegt.
+        ctx.lineWidth = Math.max(1.5, s * 0.012);
+        ctx.strokeStyle = 'rgba(255,252,244,0.85)';
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(sx, sy, s * 0.17 * pulse + ctx.lineWidth, 0, Math.PI * 2);
+        ctx.lineWidth = Math.max(1.5, s * 0.01);
+        ctx.strokeStyle = f.rand;
         ctx.stroke();
         drawMeeple(ctx, sx, sy, s * 0.2, spot.color, { shadow: false });
       }
@@ -1541,6 +1556,17 @@ export function drawPreview(canvas, defId, rot) {
   const art = tileArt(defId, rot, LOD.LARGE);
   ctx.drawImage(art, 0, 0, canvas.width, canvas.height);
 }
+
+/**
+ * Farbe der Auswahlmarke je Bauteil. Genommen aus den gemalten Karten:
+ * Stadtgold, Wegelfenbein, Wiesengrün, Klosterlapis.
+ */
+const SPOT_FARBEN = {
+  city: { fuell: 'rgba(214,166,43,0.95)', rand: 'rgba(92,66,12,0.9)' },
+  road: { fuell: 'rgba(238,229,206,0.95)', rand: 'rgba(120,102,66,0.9)' },
+  field: { fuell: 'rgba(62,138,58,0.95)', rand: 'rgba(24,64,22,0.9)' },
+  mon: { fuell: 'rgba(46,79,166,0.95)', rand: 'rgba(18,34,80,0.9)' },
+};
 
 // Meeple-Punkte in Weltkoordinaten für die Auswahlphase
 export function meepleSpotWorld(state, opt) {

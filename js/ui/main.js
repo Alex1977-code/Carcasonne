@@ -893,15 +893,29 @@ function handleTap(sx, sy) {
   if (!G || G.phase === 'over') return;
   if (ui.meeple) { // Meeple-Phase: Punkt getroffen?
     const s = board.cam.scale;
+    let treffer = null, naechste = null, kleinster = Infinity;
     for (const spot of ui.meeple.spots) {
       const [px, py] = board.worldToScreen(spot.wx, spot.wy);
-      if (Math.hypot(px - sx, py - sy) < Math.max(24, s * 0.2)) {
-        sfx.meeple();
-        const big = ui.bigNext || G.players[G.current].meeples <= 0;
-        ui.meeple = null;
-        finishTurnSafe({ fi: spot.fi, big });
-        return;
-      }
+      const d = Math.hypot(px - sx, py - sy);
+      if (d < Math.max(24, s * 0.2)) { treffer = spot; break; }
+      if (d < kleinster) { kleinster = d; naechste = spot; }
+    }
+    // Kein Punkt genau getroffen? Dann zählt, wohin auf der eben gelegten
+    // Karte getippt wurde. Auf Motiv F etwa liegen alle drei Punkte in der
+    // Mittelspalte; wer die Stadt anfassen will, tippt auf das Goldband am
+    // linken oder rechten Rand – und traf damit vorher nichts. Der Tipp
+    // muss auf der Karte selbst liegen, sonst setzt ein Fehlgriff neben
+    // dem Brett einen Gefolgsmann.
+    if (!treffer && naechste) {
+      const p = G.placed[G.lastPlacedIdx];
+      const [cx, cy] = board.screenToCell(sx, sy);
+      if (cx === p.x && cy === p.y) treffer = naechste;
+    }
+    if (treffer) {
+      sfx.meeple();
+      const big = ui.bigNext || G.players[G.current].meeples <= 0;
+      ui.meeple = null;
+      finishTurnSafe({ fi: treffer.fi, big });
     }
     return;
   }
@@ -956,7 +970,7 @@ $('btnConfirm').addEventListener('click', () => {
     opts,
     spots: opts.map(o => {
       const w = meepleSpotWorld(G, o);
-      return { ...w, fi: o.fi, color: G.players[G.current].color };
+      return { ...w, fi: o.fi, t: o.t, color: G.players[G.current].color };
     }),
   };
   updateHud();
@@ -1183,6 +1197,35 @@ refreshMenu();
 // Debug-/Test-Hook (auch nützlich als „Zug vorschlagen“)
 window.__carc = {
   get state() { return G; },
+  /**
+   * Eine bestimmte Karte an eine bestimmte Stelle legen und in die
+   * Meeple-Phase gehen – für Prüfläufe. Ohne das lässt sich ein einzelnes
+   * Motiv nicht gezielt herbeiführen, und genau das braucht man, um einen
+   * gemeldeten Fehler nachzustellen.
+   */
+  lege(defId, x, y, rot = 0) {
+    if (!G || G.phase === 'over') return null;
+    G.drawn = defId;
+    G.phase = 'place';
+    G.legalCache = null;
+    ui.sel = null;
+    placeCurrent(G, x, y, rot);
+    const opts = meepleOptions(G);
+    ui.meeple = opts.length
+      ? { opts, spots: opts.map((o) => ({ ...meepleSpotWorld(G, o), fi: o.fi, t: o.t,
+          color: G.players[G.current].color })) }
+      : null;
+    updateHud();
+    return opts.map((o) => ({ fi: o.fi, t: o.t, spot: o.spot }));
+  },
+  /** Die angebotenen Plätze mit ihrer Lage auf dem Bildschirm. */
+  plaetze() {
+    if (!ui.meeple) return [];
+    return ui.meeple.spots.map((sp) => {
+      const [sx, sy] = board.worldToScreen(sp.wx, sp.wy);
+      return { fi: sp.fi, t: sp.t, sx: Math.round(sx), sy: Math.round(sy) };
+    });
+  },
   autoMove() {
     if (G && isHumanTurn() && G.phase === 'place' && !ui.meeple && !ui.aiBusy) {
       ui.aiBusy = true;
