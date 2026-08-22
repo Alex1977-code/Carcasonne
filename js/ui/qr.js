@@ -11,11 +11,20 @@
  * Spiel. Deshalb steht hier nur der Erzeuger und kein Leser: wer beitritt,
  * hält die Kamera darauf und tippt auf die Adresse, die aufpoppt.
  *
- * Geprüft wird das Ganze in tests/qr.test.mjs gegen eine unabhängige
- * Umsetzung – Modul für Modul, über alle acht Masken, alle zehn Versionen
- * und 300 zufällige Zeichenketten. Einen Encoder ungeprüft zu schreiben
- * wäre fahrlässig: ein falsches Bit fällt am Bildschirm nicht auf, sondern
- * erst, wenn jemand mit dem Telefon davorsteht und nichts passiert.
+ * Einen Encoder ungeprüft zu schreiben wäre fahrlässig: ein falsches Bit
+ * fällt am Bildschirm nicht auf, sondern erst, wenn jemand mit dem Telefon
+ * davorsteht und nichts passiert. Geprüft wurde deshalb zweistufig:
+ *
+ *   Einmalig beim Schreiben gegen eine unabhängige Umsetzung, Modul für
+ *   Modul – 305 Zeichenketten von 1 bis 200 Zeichen über die Versionen 1
+ *   bis 10, ASCII und UTF-8, jede in allen acht Masken. Dabei kamen zwei
+ *   Fehler heraus: die Füllbytes wechselten nicht zwischen EC und 11, und
+ *   das Formatwort lag vertauscht – waagerecht statt senkrecht.
+ *
+ *   Laufend in tests/qr.test.mjs. Dort steht keine Fremdumsetzung, sondern
+ *   die an jenem Tag geprüften Matrizen als Festwert, dazu Prüfungen des
+ *   Aufbaus. Der Test hält also den geprüften Stand fest, nicht die Norm:
+ *   schlägt er an, gehört die Änderung neu gegen eine Referenz gestellt.
  */
 
 // ---------- Tabellen ----------
