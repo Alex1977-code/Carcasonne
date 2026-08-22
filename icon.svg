@@ -1,98 +1,155 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Carcassonne">
   <!--
-    App-Symbol im Stil der gemalten Karten: Champlevé-Email, Blattgold auf
-    Smaragdgrün. Die Farben sind aus den Kartenbildern gemessen, nicht
-    geschätzt: Gold #ae8320, Grün #204918, Lapis #153666.
+    App-Symbol: eine Fensterrose aus Bleiglas mit dem Gefolgsmann in der
+    Mitte.
 
-    Die Meeple-Silhouette ist dieselbe Kurve wie im Spiel (MEEPLE_PATH in
-    js/ui/render.js) – ein anderer Umriss auf dem Startbildschirm als auf
-    dem Brett fiele sofort auf.
+    Warum eine Rosette und nicht mehr ein Meeple auf grünem Grund:
 
-    Bei 48 px bleibt von einem Symbol genau eine Form übrig. Deshalb trägt
-    hier nur der Meeple die Erkennung; Wappen und Rankenwerk sind raus,
-    weil sie in dieser Größe zu Flecken zerfallen. Der Meeple bleibt
-    innerhalb des mittleren 80-%-Kreises, damit ihn auch die runde Maske
-    von Android nicht anschneidet.
+    Android maskiert das Symbol rund, quadratisch oder als Tropfen – je
+    nach Gerät und Einstellung. Der Vorgänger hatte ein Stadtmauerband
+    dicht am Rand; unter der runden Maske war davon nur noch ein
+    angeschnittener Bogen übrig, und das sah nach Fehler aus. Eine Rosette
+    ist von sich aus rund. Was die Maske abschneidet, sind die äußeren
+    Enden der Strahlen, und das fällt an einem radialen Muster nicht auf.
+
+    Alles, was die Erkennung trägt, liegt im mittleren Kreis mit r = 170 –
+    das ist die Zone, die jede Maske stehen lässt.
+
+    Die Figur ist dieselbe Kurve wie auf dem Brett (MEEPLE_PATH in
+    js/ui/render.js) und in derselben Machart wie dort seit der
+    Bleiverglasung: dunkle Ruten, Scheiben aus verschiedenem Glas. Ein
+    anderer Umriss oder eine andere Machart auf dem Startbildschirm als im
+    Spiel fiele sofort auf.
+
+    Bei 48 px bleibt davon: eine goldene Figur auf dunklem Grund mit einem
+    hellen Ring darum. Mehr trägt diese Größe nicht, und mehr braucht sie
+    nicht.
+
+    Farben aus den Kartenbildern gemessen: Blattgold #ae8320, Lapis
+    #153666, Smaragd #204918, Bleirute #2c2419.
   -->
   <defs>
-    <linearGradient id="email" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#2b5c1c"/>
-      <stop offset="0.5" stop-color="#1c4415"/>
-      <stop offset="1" stop-color="#102a0b"/>
-    </linearGradient>
-
     <!-- Blattgold: der schnelle Umschlag von Glanz zu Schatten macht das
          Metall aus. Ein weicher Verlauf sieht nach Sand aus. -->
     <linearGradient id="blatt" x1="0.22" y1="0.05" x2="0.78" y2="0.95">
-      <stop offset="0" stop-color="#fff0b4"/>
-      <stop offset="0.18" stop-color="#f0cc63"/>
-      <stop offset="0.42" stop-color="#d2a233"/>
-      <stop offset="0.6" stop-color="#a87c17"/>
-      <stop offset="0.82" stop-color="#8a6410"/>
-      <stop offset="1" stop-color="#6d4d09"/>
+      <stop offset="0" stop-color="#fff2bd"/>
+      <stop offset="0.17" stop-color="#f2d070"/>
+      <stop offset="0.40" stop-color="#d5a638"/>
+      <stop offset="0.60" stop-color="#a87c17"/>
+      <stop offset="0.83" stop-color="#8a6410"/>
+      <stop offset="1" stop-color="#6b4b08"/>
     </linearGradient>
 
-    <linearGradient id="band" x1="0.1" y1="0" x2="0.7" y2="1">
-      <stop offset="0" stop-color="#efd07f"/>
-      <stop offset="0.45" stop-color="#b98d24"/>
-      <stop offset="1" stop-color="#7d5c10"/>
+    <linearGradient id="ring" x1="0.1" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#f7dc92"/>
+      <stop offset="0.45" stop-color="#bd9026"/>
+      <stop offset="1" stop-color="#775810"/>
     </linearGradient>
 
-    <!-- Punzierung des Emailgrunds, sehr zurückhaltend -->
-    <pattern id="korn" width="16" height="16" patternUnits="userSpaceOnUse">
-      <circle cx="4" cy="4" r="1.6" fill="#ffffff" opacity="0.055"/>
-      <circle cx="12" cy="12" r="1.6" fill="#000000" opacity="0.07"/>
-    </pattern>
-
-    <radialGradient id="kerze" cx="0.32" cy="0.24" r="0.86">
-      <stop offset="0" stop-color="#ffe6b0" stop-opacity="0.20"/>
-      <stop offset="0.5" stop-color="#000000" stop-opacity="0"/>
-      <stop offset="1" stop-color="#000000" stop-opacity="0.40"/>
+    <!-- Zwei Glassorten im Wechsel, beide flach. Der erste Entwurf gab
+         jedem Segment einen eigenen Verlauf – der dreht mit dem Segment
+         mit, und dadurch las sich die Rosette als Farbrad statt als
+         Fenster. Das Licht kommt von einer Stelle, nicht von zwölf: es
+         liegt als eine Schicht ueber allem (#kerze). -->
+    <radialGradient id="tiefe" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0.28" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000814" stop-opacity="0.55"/>
     </radialGradient>
+
+    <!-- Grund unter allem: bis in die Ecken, damit keine Maske ins Leere
+         greift. -->
+    <radialGradient id="grund" cx="0.42" cy="0.36" r="0.78">
+      <stop offset="0" stop-color="#1d3f6f"/>
+      <stop offset="0.55" stop-color="#12294c"/>
+      <stop offset="1" stop-color="#08152a"/>
+    </radialGradient>
+
+    <!-- Kerzenschein von oben links, wie im Spiel -->
+    <radialGradient id="kerze" cx="0.32" cy="0.24" r="0.88">
+      <stop offset="0" stop-color="#ffe6b0" stop-opacity="0.22"/>
+      <stop offset="0.5" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.42"/>
+    </radialGradient>
+
+    <!-- Ein Strahl der Rosette, Spitze zur Mitte. Wird zwölfmal gedreht. -->
+    <!-- Ein Kreissegment von 30 Grad, Spitze nach oben. Zwoelfmal
+         gedreht kachelt es die Flaeche lueckenlos; der erste Entwurf
+         nahm ein Sechseck, und daraus wurde ein Windrad. -->
+    <path id="strahl" d="M217.2 111.1 L157.6 -111.1 A380 380 0 0 1 354.4 -111.1 L294.8 111.1 A150 150 0 0 0 217.2 111.1 Z"/>
+
     <!-- Nur die Geometrie: Darstellungsattribute am Original wuerden
          jedes fill/stroke am <use> ueberstimmen. -->
     <path id="kontur" d="M50 6 C59.4 6 67 13.6 67 23 C67 29.6 63.2 35.3 57.7 38.1 C64.6 40.3 71.2 44.1 77.4 49.4 C85.6 56.4 90.6 62.1 92.4 66.5 C94.4 71.4 91.4 75.4 86.6 74.6 C81.2 73.7 74.6 70.6 68.4 66.2 C69.6 76.4 72.6 86.4 77.3 94.4 C79.1 97.5 77.4 99.6 74.2 99.6 L60.2 99.6 C57.2 99.6 55.3 97.9 54.7 94.9 C53.9 90.9 52.4 88.4 50 88.4 C47.6 88.4 46.1 90.9 45.3 94.9 C44.7 97.9 42.8 99.6 39.8 99.6 L25.8 99.6 C22.6 99.6 20.9 97.5 22.7 94.4 C27.4 86.4 30.4 76.4 31.6 66.2 C25.4 70.6 18.8 73.7 13.4 74.6 C8.6 75.4 5.6 71.4 7.6 66.5 C9.4 62.1 14.4 56.4 22.6 49.4 C28.8 44.1 35.4 40.3 42.3 38.1 C36.8 35.3 33 29.6 33 23 C33 13.6 40.6 6 50 6 Z"/>
+
+    <!-- Die Bleiruten der Figur, dieselben wie in render/glass.js -->
+    <g id="ruten">
+      <path d="M41.5 37.5 Q50 42 58.5 37.5"/>
+      <path d="M57.7 38.1 Q68 48 68.4 66.2"/>
+      <path d="M42.3 38.1 Q32 48 31.6 66.2"/>
+      <path d="M34.5 50 Q50 53.5 65.5 50"/>
+      <path d="M31.6 66.2 Q50 71.5 68.4 66.2"/>
+      <path d="M50 69.5 L50 88.4"/>
+    </g>
+
+    <clipPath id="figur">
+      <use href="#kontur" transform="translate(256 262) scale(2.28) translate(-50 -53)"/>
+    </clipPath>
   </defs>
 
-  <!-- Grund: randvoll, damit auch die runde Maske nirgends ins Leere greift -->
-  <rect width="512" height="512" fill="url(#email)"/>
-  <rect width="512" height="512" fill="url(#korn)"/>
+  <rect width="512" height="512" fill="url(#grund)"/>
 
-  <!-- Stadtmauerband mit Zinnenmarken – das Erkennungszeichen der Karten -->
-  <rect x="30" y="30" width="452" height="452" rx="30"
-        fill="none" stroke="url(#band)" stroke-width="14"/>
-  <rect x="30" y="30" width="452" height="452" rx="30"
-        fill="none" stroke="#4a3407" stroke-opacity="0.5" stroke-width="1.8"/>
-  <g fill="#efd07f">
-    <rect x="140" y="24" width="14" height="14" rx="3"/>
-    <rect x="249" y="24" width="14" height="14" rx="3"/>
-    <rect x="358" y="24" width="14" height="14" rx="3"/>
-    <rect x="140" y="474" width="14" height="14" rx="3"/>
-    <rect x="249" y="474" width="14" height="14" rx="3"/>
-    <rect x="358" y="474" width="14" height="14" rx="3"/>
-    <rect x="24" y="140" width="14" height="14" rx="3"/>
-    <rect x="24" y="249" width="14" height="14" rx="3"/>
-    <rect x="24" y="358" width="14" height="14" rx="3"/>
-    <rect x="474" y="140" width="14" height="14" rx="3"/>
-    <rect x="474" y="249" width="14" height="14" rx="3"/>
-    <rect x="474" y="358" width="14" height="14" rx="3"/>
+  <!-- Die Rosette. Zwölf Strahlen, zwei Glassorten im Wechsel, jeder in
+       eine Bleirute gefasst. Sie reicht über den Bildrand hinaus: unter
+       jeder Maske bleibt ein vollständiges Muster stehen. -->
+  <g stroke="#2c2419" stroke-width="13" stroke-linejoin="round">
+    <g>
+      <use href="#strahl" fill="#22508f"/>
+      <use href="#strahl" fill="#2c6320" transform="rotate(30 256 256)"/>
+      <use href="#strahl" fill="#22508f" transform="rotate(60 256 256)"/>
+      <use href="#strahl" fill="#2c6320" transform="rotate(90 256 256)"/>
+      <use href="#strahl" fill="#22508f" transform="rotate(120 256 256)"/>
+      <use href="#strahl" fill="#2c6320" transform="rotate(150 256 256)"/>
+      <use href="#strahl" fill="#22508f" transform="rotate(180 256 256)"/>
+      <use href="#strahl" fill="#2c6320" transform="rotate(210 256 256)"/>
+      <use href="#strahl" fill="#22508f" transform="rotate(240 256 256)"/>
+      <use href="#strahl" fill="#2c6320" transform="rotate(270 256 256)"/>
+      <use href="#strahl" fill="#22508f" transform="rotate(300 256 256)"/>
+      <use href="#strahl" fill="#2c6320" transform="rotate(330 256 256)"/>
+    </g>
   </g>
 
-  <!-- Meeple: dieselbe Kurve wie auf dem Brett, hier in Blattgold.
-       Der dunkle Steg ist der Cloisonné-Grat zwischen den Emailfeldern –
-       er trennt die Figur vom Grund, ohne sie einzurahmen. -->
-  <g transform="translate(256 258) scale(3.34) translate(-50 -53)">
-    <use href="#kontur" fill="none" stroke="#0c220a" stroke-opacity="0.55"
-         stroke-width="6" stroke-linejoin="round"/>
-    <use href="#kontur" fill="url(#blatt)" stroke="#63460a" stroke-width="2"
+  <!-- Nach außen dunkler: ein Fenster ist in der Mitte am hellsten, und
+       ohne das steht die Figur in einem gleichmäßig lauten Muster. -->
+  <rect width="512" height="512" fill="url(#tiefe)"/>
+
+  <!-- Das Mittelfeld: eine eigene Scheibe, in Gold gefasst. Der Ring ist
+       das, was bei 32 px als Letztes übrig bleibt – er trennt die Figur
+       vom Muster, wenn beide zu einem Fleck verschwimmen. -->
+  <circle cx="256" cy="256" r="152" fill="#173a1a"/>
+  <circle cx="256" cy="256" r="152" fill="none" stroke="#2c2419" stroke-width="16"/>
+  <circle cx="256" cy="256" r="152" fill="none" stroke="url(#ring)" stroke-width="9"/>
+
+  <!-- Der Gefolgsmann, in Blattgold und in Bleiruten gefasst -->
+  <g transform="translate(256 262) scale(2.28) translate(-50 -53)">
+    <use href="#kontur" fill="none" stroke="#2c2419" stroke-opacity="0.75"
+         stroke-width="9" stroke-linejoin="round"/>
+    <use href="#kontur" fill="url(#blatt)"/>
+  </g>
+  <g clip-path="url(#figur)" fill="none" stroke="#2c2419" stroke-width="1.9"
+     stroke-linecap="round">
+    <use href="#ruten" transform="translate(256 262) scale(2.28) translate(-50 -53)"/>
+  </g>
+  <g transform="translate(256 262) scale(2.28) translate(-50 -53)">
+    <use href="#kontur" fill="none" stroke="#2c2419" stroke-width="2.4"
          stroke-linejoin="round"/>
     <!-- Glanzkante oben links: schmaler Streifen echten Lichts -->
-    <path d="M50 9.4 C42.4 9.4 36.3 15.5 36.3 23 C36.3 27.7 38.7 31.9 42.3 34.4"
-          fill="none" stroke="#fff6d2" stroke-opacity="0.75" stroke-width="3.6" stroke-linecap="round"/>
-    <path d="M25.6 51.8 C19.6 56.9 15 61.4 12.4 65.2"
-          fill="none" stroke="#fff6d2" stroke-opacity="0.5" stroke-width="3" stroke-linecap="round"/>
+    <path d="M50 9.6 C42.6 9.6 36.6 15.6 36.6 23 C36.6 27.5 38.8 31.6 42.2 34.2"
+          fill="none" stroke="#fff8dc" stroke-opacity="0.8" stroke-width="3"
+          stroke-linecap="round"/>
+    <path d="M25.8 51.6 C20 56.6 15.4 61 12.8 64.8"
+          fill="none" stroke="#fff8dc" stroke-opacity="0.5" stroke-width="2.4"
+          stroke-linecap="round"/>
   </g>
 
-  <!-- Kerzenschein von oben links, wie im Spiel -->
   <rect width="512" height="512" fill="url(#kerze)"/>
 </svg>

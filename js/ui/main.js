@@ -9,6 +9,7 @@ import {
 import { chooseMove } from '../engine/ai.js';
 import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld } from './render.js';
 import { spreizeSpots } from './spot-layout.js';
+import { qrZeichnen } from './qr.js';
 import { sfx, applySoundOptions, unlockAudio, startMusic, stopMusic, soundState } from './sound.js';
 import { Net } from './net.js';
 import { PLAYER_HEXES, PLAYER_NAMES } from './render/meeple-colors.js';
@@ -338,6 +339,7 @@ $('btnHost').addEventListener('click', async () => {
     $('onlineOff').classList.add('hidden');
     $('onlineHost').classList.remove('hidden');
     $('roomCode').textContent = net.code;
+    zeigeRaumCode(net.code);
     $('hostStatus').textContent = 'Warte auf Mitspieler…';
     // Lokal reicht ab jetzt 1 Spieler
     renderPlayerRows();
@@ -347,6 +349,39 @@ $('btnHost').addEventListener('click', async () => {
     $('btnHost').disabled = false;
   }
 });
+
+/**
+ * Die Adresse, unter der man diesem Raum beitritt.
+ *
+ * Die Kamera-App des Telefons öffnet, was im QR-Code steht – also muss
+ * dort eine vollständige Adresse stehen und kein bloßer Code. Der Raum
+ * hängt hinten dran; beim Öffnen liest ihn `raumAusAdresse()` wieder aus
+ * und trägt ihn ein.
+ */
+function beitrittsAdresse(code) {
+  return location.href.split('#')[0] + '#raum=' + code;
+}
+
+/** Den QR-Code für einen Raum zeichnen. */
+function zeigeRaumCode(code) {
+  const canvas = $('roomQr');
+  if (!canvas) return;
+  try {
+    qrZeichnen(canvas, beitrittsAdresse(code), { modul: 6 });
+  } catch (e) {
+    // Ohne QR geht es weiter – der Code steht daneben und lässt sich
+    // eintippen. Ein fehlendes Bild ist kein Grund, den Raum nicht zu
+    // öffnen.
+    canvas.classList.add('hidden');
+    console.warn('QR-Code nicht erzeugt:', e.message);
+  }
+}
+
+/** Steht in der Adresse ein Raum? Dann den Code, sonst null. */
+function raumAusAdresse() {
+  const m = /[#&]raum=([A-Za-z0-9]{3,8})/.exec(location.hash || '');
+  return m ? m[1].toUpperCase() : null;
+}
 
 function wireHostNet(net) {
   net.onGuestJoin = () => { /* Name kommt mit hello */ };
@@ -1222,6 +1257,24 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 refreshMenu();
+
+// Steht ein Raum in der Adresse, führt der Weg direkt in den
+// Beitritts-Dialog. Genau das passiert, wenn jemand den QR-Code mit der
+// Kamera aufnimmt und auf die Adresse tippt: ohne das landete er im
+// Hauptmenü und müsste den Code doch wieder abtippen.
+{
+  const raum = raumAusAdresse();
+  if (raum) {
+    // Den Raum aus der Adresse nehmen, damit ein späteres Neuladen nicht
+    // erneut in den Dialog springt.
+    history.replaceState(null, '', location.href.split('#')[0]);
+    backTarget = 'menu';
+    showScreen('setup');
+    $('btnJoin').click();
+    $('joinCode').value = raum;
+    $('joinName').focus();
+  }
+}
 
 // Debug-/Test-Hook (auch nützlich als „Zug vorschlagen“)
 window.__carc = {

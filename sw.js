@@ -16,7 +16,7 @@
 // Wartezeit ist gedeckelt: kommt binnen drei Sekunden nichts, gilt der
 // Cache. Bei schlechtem Empfang startet das Spiel dadurch genauso schnell
 // wie vorher.
-const CACHE = 'carcassonne-v18';
+const CACHE = 'carcassonne-v19';
 const FRIST = 3000;   // so lange wird höchstens auf das Netz gewartet
 const ASSETS = [
   './',
@@ -48,6 +48,7 @@ const ASSETS = [
   './js/ui/render/rng.js',
   './js/ui/render/tiles.js',
   './js/ui/spot-layout.js',
+  './js/ui/qr.js',
   // Gemalte Karten. Fehlt eine, faellt das Spiel auf die gezeichnete
   // Darstellung zurueck – deshalb ist die Liste nicht heikel, sie sorgt
   // nur dafuer, dass offline von Anfang an die Malerei zu sehen ist.

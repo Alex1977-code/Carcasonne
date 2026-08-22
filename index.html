@@ -54,12 +54,29 @@
             <button id="btnHost" class="btn small">Spiel erstellen</button>
             <button id="btnJoin" class="btn small">Mit Code beitreten</button>
           </div>
-          <p class="hint">Erstelle einen Raum und teile den Code – Mitspieler
-          treten auf ihren Handys bei. Codes mit „T“ verbinden zwei Tabs im
-          selben Browser.</p>
+          <p class="hint">Erstelle einen Raum; die anderen scannen den
+          QR-Code, der dann erscheint, oder tippen den Raum-Code ein. Alle
+          Geräte brauchen dafür <b>Internet</b> – über Bluetooth oder ein
+          Netz ohne Internet geht es nicht, siehe Hilfe. Codes mit „T“
+          verbinden zwei Tabs im selben Browser.</p>
         </div>
         <div id="onlineHost" class="hidden">
           <p class="room-line">Raum-Code: <b class="room-code" id="roomCode">…</b></p>
+          <div class="qr-block">
+            <canvas id="roomQr" width="252" height="252"
+                    aria-label="QR-Code zum Beitreten"></canvas>
+            <ol class="anleitung">
+              <li>Dieses Fenster offen lassen.</li>
+              <li>Die anderen öffnen die <b>Kamera</b> ihres Telefons und
+                  halten sie auf den Code.</li>
+              <li>Auf die Adresse tippen, die erscheint – das Spiel öffnet
+                  sich mit eingetragenem Raum-Code.</li>
+              <li>Name eintippen, <b>Beitreten</b>.</li>
+              <li>Sind alle da, hier auf <b>Spiel starten</b> tippen.</li>
+            </ol>
+          </div>
+          <p class="hint">Ohne Kamera geht es auch: „Mit Code beitreten“ und
+          den Raum-Code von Hand eintippen.</p>
           <p class="hint" id="hostStatus">Warte auf Mitspieler…</p>
           <button id="btnHostCancel" class="btn small danger ghost">Raum schließen</button>
         </div>
@@ -236,6 +253,31 @@
         <p>Ziehen = Karte verschieben · Kneifen = Zoomen · Leuchtendes Feld
         antippen = Karte dort ablegen · ⟳ = Drehen · Danach Meeple-Punkt antippen
         oder „Ohne Meeple“.</p>
+        <p>Beim Setzen zeigt jede Marke die Farbe ihres Bauteils: Gold =
+        Stadt, Elfenbein = Straße, Grün = Wiese, Blau = Kloster. Eine
+        gedämpfte Marke mit Riegel heißt: dieses Gebiet gehört schon
+        jemandem – in der Farbe dessen, dem es gehört. Auch wenn seine
+        Figur weit außerhalb des Bildausschnitts steht.</p>
+
+        <h3>Zu mehreren auf mehreren Geräten</h3>
+        <p>Einer erstellt unter <b>Neues Spiel → Online-Mehrspieler</b> einen
+        Raum. Es erscheinen ein Raum-Code und ein QR-Code. Die anderen halten
+        einfach die <b>Kamera</b> ihres Telefons darauf und tippen auf die
+        Adresse, die aufpoppt – das Spiel öffnet sich mit eingetragenem Code.
+        Ohne Kamera geht es über „Mit Code beitreten“ und den Code von Hand.
+        Sind alle in der Liste, startet der Gastgeber.</p>
+        <p><b>Was gebraucht wird:</b> alle Geräte brauchen Internet. Die
+        Verbindung wird über einen öffentlichen Vermittler hergestellt;
+        danach laufen die Spielzüge direkt von Gerät zu Gerät. Sind alle im
+        selben WLAN, bleiben sie dabei auch im WLAN – aber das erste
+        Händeschütteln braucht das Netz.</p>
+        <p><b>Was nicht geht:</b> Bluetooth. Ein Browser kann sich damit nur
+        mit Geräten wie Kopfhörern oder Sensoren verbinden, nicht mit einem
+        anderen Telefon – ein Telefon kann sich im Browser nicht als
+        Gegenstelle anbieten. Ebenso wenig ein Netz ganz ohne Internet: für
+        das erste Händeschütteln müssen sich beide Seiten irgendwo treffen
+        können. Wer ohne Netz zu zweit spielen will, spielt an einem Gerät –
+        dafür sind bis zu sechs Spieler vorgesehen.</p>
       </div>
       <div class="spacer"></div>
     </div>
