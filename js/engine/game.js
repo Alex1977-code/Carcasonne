@@ -245,6 +245,41 @@ export function meepleOptions(s) {
   return out;
 }
 
+/**
+ * Die Bauteile der eben gelegten Karte, auf die **kein** Gefolgsmann kann,
+ * weil in dem Gebiet schon einer steht – mit dem Spieler, dem er gehört.
+ *
+ * Die Regel ist richtig und alt: ein Gebiet trägt einen Gefolgsmann, und
+ * wer zuerst da war, hat es. Nur sieht man das am Brett nicht. Die Stadt
+ * auf der frisch gelegten Karte reicht vielleicht zwanzig Karten weit, und
+ * am anderen Ende steht seit sechs Zügen ein fremder Ritter, der längst aus
+ * dem Bildausschnitt gewandert ist. Auf dem Telefon sieht man dann eine
+ * leere Stadt, zwei eigene Gefolgsleute in der Hand – und keine Marke.
+ * Genau so gemeldet: „meeple verfügbar aber stadt wird nicht angeboten".
+ *
+ * Deshalb wird das Gebiet trotzdem gezeigt, nur als besetzt und in der
+ * Farbe dessen, dem es gehört. Aus einer stummen Ablehnung wird eine
+ * Auskunft.
+ */
+export function meepleBesetzt(s) {
+  if (s.phase !== 'meeple') return [];
+  const p = s.placed[s.lastPlacedIdx];
+  const d = DEFS[p.defId];
+  const out = [];
+  const gesehen = new Set();
+  p.fsegs.forEach((segId, fi) => {
+    const f = d.f[fi];
+    if (f.t === 'river') return;
+    const wurzel = find(s, segId);
+    if (gesehen.has(wurzel)) return;
+    const data = s.roots.get(wurzel);
+    if (!data.meeples.length) return;
+    gesehen.add(wurzel);
+    out.push({ fi, t: f.t, spot: f.spot, pl: data.meeples[0].pl });
+  });
+  return out;
+}
+
 // ---------- Wertung ----------
 function returnMeeples(s, data) {
   for (const m of data.meeples) {

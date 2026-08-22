@@ -104,15 +104,33 @@ function simulate(s, cand, rot, meeple, before, me) {
   return moveValue(before, evalPlayers(sim), me);
 }
 
-function gauss(sigma) {
+function gauss(sigma, wuerfel) {
   let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
+  while (u === 0) u = wuerfel();
+  while (v === 0) v = wuerfel();
   return sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-// Liefert { x, y, rot, meeple } für den aktuellen Spieler/aktuelle Karte
-export function chooseMove(s) {
+/**
+ * Liefert { x, y, rot, meeple } für den aktuellen Spieler/aktuelle Karte.
+ *
+ * Die KI würfelt an zehn Stellen: welche der gleichwertigen Stellen sie
+ * nimmt, ob sie einen Gefolgsmann setzt, und wie weit ihre Bewertung
+ * daneben greifen darf. Das soll so sein – eine KI, die zweimal dieselbe
+ * Partie spielt, ist keine.
+ *
+ * Für den Test ist es das Gegenteil von hilfreich. Die Engine-Suite zählte
+ * bei drei Läufen 1671, 1670 und 1671 Prüfungen, und in der Regel-Suite
+ * fiel eine echte Fehlprüfung nur in etwa jedem dritten Lauf auf. Wer sie
+ * rot sieht, lässt sie noch einmal laufen, sieht sie grün und legt sie weg.
+ *
+ * Deshalb ist die Würfelquelle jetzt ein Parameter. Ohne Angabe bleibt es
+ * `Math.random`, im Spiel ändert sich also nichts.
+ *
+ * @param {object} s Spielstand.
+ * @param {() => number} [wuerfel] Quelle für Zufallszahlen aus [0,1).
+ */
+export function chooseMove(s, wuerfel = Math.random) {
   const me = s.current;
   const pl = s.players[me];
   const level = pl.type; // ai1 | ai2 | ai3
@@ -120,16 +138,16 @@ export function chooseMove(s) {
   if (!cands.length) return null;
 
   if (level === 'ai1') {
-    const c = cands[Math.floor(Math.random() * cands.length)];
-    const rot = c.rots[Math.floor(Math.random() * c.rots.length)];
+    const c = cands[Math.floor(wuerfel() * cands.length)];
+    const rot = c.rots[Math.floor(wuerfel() * c.rots.length)];
     const sim = cloneState(s);
     placeCurrent(sim, c.x, c.y, rot);
     let meeple = null;
     const opts = meepleOptions(sim);
-    if (opts.length && Math.random() < 0.55 && (pl.meeples > 0 || pl.bigMeeples > 0)) {
+    if (opts.length && wuerfel() < 0.55 && (pl.meeples > 0 || pl.bigMeeples > 0)) {
       const pref = opts.filter(o => o.t === 'city');
-      const pool = pref.length && Math.random() < 0.7 ? pref : opts;
-      meeple = { fi: pool[Math.floor(Math.random() * pool.length)].fi, big: pl.meeples <= 0 };
+      const pool = pref.length && wuerfel() < 0.7 ? pref : opts;
+      meeple = { fi: pool[Math.floor(wuerfel() * pool.length)].fi, big: pl.meeples <= 0 };
     }
     return { x: c.x, y: c.y, rot, meeple };
   }
@@ -143,7 +161,7 @@ export function chooseMove(s) {
   const capFlat = level === 'ai3' ? 120 : 70;
   if (flat.length > capFlat) {
     for (let i = flat.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(wuerfel() * (i + 1));
       [flat[i], flat[j]] = [flat[j], flat[i]];
     }
     flat = flat.slice(0, capFlat);
@@ -175,7 +193,7 @@ export function chooseMove(s) {
   for (let i = 0; i < K; i++) {
     const { c, r, nullVal, opts } = ranked[i];
     {
-      const v = nullVal + gauss(sigma);
+      const v = nullVal + gauss(sigma, wuerfel);
       if (v > bestV) { bestV = v; best = { x: c.x, y: c.y, rot: r, meeple: null }; }
     }
     const choices = [];
@@ -192,7 +210,7 @@ export function chooseMove(s) {
       const left = meeple.big ? pl.bigMeeples : pl.meeples;
       v -= Math.max(0, 2.6 - 0.55 * left);
       if (meeple.big) v -= 0.8;
-      v += gauss(sigma);
+      v += gauss(sigma, wuerfel);
       if (v > bestV) { bestV = v; best = { x: c.x, y: c.y, rot: r, meeple }; }
     }
   }

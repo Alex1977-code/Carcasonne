@@ -1486,6 +1486,37 @@ export class BoardView {
     // schlimmer noch: auf Motiv F liegen alle drei Punkte übereinander in
     // der Mittelspalte, die mittlere davon auf dem Stadtband, und die
     // weiße Scheibe verdeckt genau die Stadt, für die sie steht.
+    // Besetzte Gebiete: erst, damit eine freie Marke darüber liegt, wenn
+    // die beiden sich trotz Spreizen noch berühren. Gedämpft und in der
+    // Farbe dessen, dem das Gebiet gehört, mit einem Riegel darüber – wer
+    // hier hinlangt, soll sehen, dass es nicht am Spiel liegt.
+    if (view.meepleBesetzt) {
+      for (const spot of view.meepleBesetzt) {
+        const [sx, sy] = this.worldToScreen(spot.wx, spot.wy);
+        const rad = s * 0.15;
+        ctx.globalAlpha = 0.72;
+        ctx.beginPath();
+        ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(38,30,22,0.86)';
+        ctx.fill();
+        ctx.lineWidth = Math.max(1.5, s * 0.014);
+        ctx.strokeStyle = spot.color;
+        ctx.stroke();
+        drawMeeple(ctx, sx, sy, s * 0.17, spot.color, { shadow: false });
+        // Der Riegel: ein Schrägstrich, wie er auf Verbotsschildern steht.
+        ctx.beginPath();
+        ctx.moveTo(sx - rad * 0.72, sy + rad * 0.72);
+        ctx.lineTo(sx + rad * 0.72, sy - rad * 0.72);
+        ctx.lineWidth = Math.max(2, s * 0.022);
+        ctx.strokeStyle = 'rgba(248,242,232,0.92)';
+        ctx.stroke();
+        ctx.lineWidth = Math.max(1, s * 0.010);
+        ctx.strokeStyle = 'rgba(40,26,16,0.9)';
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
     if (view.meepleSpots) {
       for (const spot of view.meepleSpots) {
         const [sx, sy] = this.worldToScreen(spot.wx, spot.wy);

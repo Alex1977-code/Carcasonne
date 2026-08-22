@@ -5,6 +5,7 @@ import {
   finishTurn, cloneState, serialize, resumeGame, find,
 } from '../js/engine/game.js';
 import { chooseMove } from '../js/engine/ai.js';
+import { festerStapel, wuerfelAus } from './deck.mjs';
 
 let failed = 0, passed = 0;
 function ok(cond, msg) {
@@ -311,16 +312,17 @@ function twoPlayers(extra = {}) {
 
 // ---------- 13. KI spielt komplette Partien ----------
 for (const level of ['ai1', 'ai2', 'ai3']) {
-  const s = newGame({
+  const s = newGame(festerStapel({
     players: [
       { name: 'KI A', color: '#e74c3c', type: level },
       { name: 'KI B', color: '#3498db', type: level },
     ],
     expansions: { river: true, inns: true, king: true }, deckScale: 1,
-  });
+  }, 0xa11 + level.charCodeAt(2)));
+  const wuerfel = wuerfelAus(0xa11 + level.charCodeAt(2));
   let guard = 0;
   while (s.phase !== 'over' && guard++ < 400) {
-    const mv = chooseMove(s);
+    const mv = chooseMove(s, wuerfel);
     ok(mv, `${level}: Zug gefunden`);
     if (!mv) break;
     placeCurrent(s, mv.x, mv.y, mv.rot);
@@ -334,17 +336,18 @@ for (const level of ['ai1', 'ai2', 'ai3']) {
 
 // ---------- 14. Komplette Basispartie – Statistik ----------
 {
-  const s = newGame({
+  const s = newGame(festerStapel({
     players: [
       { name: 'A', color: '#e74c3c', type: 'ai2' },
       { name: 'B', color: '#3498db', type: 'ai3' },
       { name: 'C', color: '#f1c40f', type: 'ai1' },
     ],
     expansions: {}, deckScale: 1,
-  });
+  }, 0xb45e));
+  const wuerfel = wuerfelAus(0xb45e);
   let guard = 0;
   while (s.phase !== 'over' && guard++ < 300) {
-    const mv = chooseMove(s);
+    const mv = chooseMove(s, wuerfel);
     if (!mv) break;
     placeCurrent(s, mv.x, mv.y, mv.rot);
     finishTurn(s, mv.meeple);

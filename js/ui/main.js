@@ -4,7 +4,7 @@
 import { DEFS, deckSizeFor } from '../engine/tiles.js';
 import {
   newGame, cloneState, legalPlacements, placeCurrent, meepleOptions,
-  finishTurn, serialize, resumeGame,
+  meepleBesetzt, finishTurn, serialize, resumeGame,
 } from '../engine/game.js';
 import { chooseMove } from '../engine/ai.js';
 import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld } from './render.js';
@@ -677,6 +677,7 @@ function startLoop() {
       legal: humanPlace && options.hints ? legalPlacements(G) : null,
       sel: ui.sel && G.drawn && G.phase === 'place' ? { ...ui.sel, defId: G.drawn } : null,
       meepleSpots: ui.meeple ? ui.meeple.spots : null,
+      meepleBesetzt: ui.meeple ? ui.meeple.besetzt : null,
       floaters: ui.floaters,
       lastPlaced: ui.lastPlaced,
       anim: options.anim ? ui.anim : null,
@@ -897,14 +898,23 @@ bc.addEventListener('wheel', (e) => {
  */
 function markenLegen(opts) {
   const p = G.placed[G.lastPlacedIdx];
-  const roh = opts.map((o) => meepleSpotWorld(G, o));
+  // Die besetzten Gebiete rücken mit auseinander, obwohl man sie nicht
+  // antippen kann. Täte man das nicht, läge die besetzte Stadt unter der
+  // freien Wiese, und die Auskunft wäre wieder unsichtbar.
+  const besetzt = meepleBesetzt(G);
+  const alle = [...opts, ...besetzt];
+  const roh = alle.map((o) => meepleSpotWorld(G, o));
   const lokal = roh.map((w) => ({ x: w.wx - (p.x - 0.5), y: w.wy - (p.y - 0.5) }));
   const weit = spreizeSpots(lokal);
-  return opts.map((o, i) => ({
-    wx: p.x - 0.5 + weit[i].x,
-    wy: p.y - 0.5 + weit[i].y,
-    fi: o.fi, t: o.t, color: G.players[G.current].color,
-  }));
+  const welt = (i) => ({ wx: p.x - 0.5 + weit[i].x, wy: p.y - 0.5 + weit[i].y });
+  return {
+    spots: opts.map((o, i) => ({
+      ...welt(i), fi: o.fi, t: o.t, color: G.players[G.current].color,
+    })),
+    besetzt: besetzt.map((b, i) => ({
+      ...welt(opts.length + i), fi: b.fi, t: b.t, color: G.players[b.pl].color,
+    })),
+  };
 }
 
 function handleTap(sx, sy) {
@@ -991,7 +1001,7 @@ $('btnConfirm').addEventListener('click', () => {
     finishTurnSafe(null);
     return;
   }
-  ui.meeple = { opts, spots: markenLegen(opts) };
+  ui.meeple = { opts, ...markenLegen(opts) };
   updateHud();
 });
 
@@ -1230,7 +1240,7 @@ window.__carc = {
     ui.sel = null;
     placeCurrent(G, x, y, rot);
     const opts = meepleOptions(G);
-    ui.meeple = opts.length ? { opts, spots: markenLegen(opts) } : null;
+    ui.meeple = opts.length ? { opts, ...markenLegen(opts) } : null;
     updateHud();
     return opts.map((o) => ({ fi: o.fi, t: o.t, spot: o.spot }));
   },
@@ -1241,6 +1251,22 @@ window.__carc = {
       const [sx, sy] = board.worldToScreen(sp.wx, sp.wy);
       return { fi: sp.fi, t: sp.t, sx: Math.round(sx), sy: Math.round(sy) };
     });
+  },
+  /** Die gesperrten Gebiete mit ihrer Lage auf dem Bildschirm. */
+  besetzte() {
+    if (!ui.meeple || !ui.meeple.besetzt) return [];
+    return ui.meeple.besetzt.map((sp) => {
+      const [sx, sy] = board.worldToScreen(sp.wx, sp.wy);
+      return { fi: sp.fi, t: sp.t, sx: Math.round(sx), sy: Math.round(sy) };
+    });
+  },
+  /** Zug beenden, wahlweise mit einem Gefolgsmann auf Segment `fi`. */
+  beende(fi = null) {
+    if (!G || G.phase !== 'meeple') return false;
+    ui.meeple = null;
+    finishTurnSafe(fi === null ? null
+      : { fi, big: G.players[G.current].meeples <= 0 });
+    return true;
   },
   autoMove() {
     if (G && isHumanTurn() && G.phase === 'place' && !ui.meeple && !ui.aiBusy) {

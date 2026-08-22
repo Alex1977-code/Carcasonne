@@ -10,9 +10,10 @@
 
 import { DEFS, DIRS, opp, matchHalf, edgeAt } from '../js/engine/tiles.js';
 import { spreizeSpots, MAX_RUECKUNG } from '../js/ui/spot-layout.js';
+import { festerStapel } from './deck.mjs';
 import {
   newGame, isLegal, legalPlacementsFor, placeCurrent, meepleOptions,
-  finishTurn, find, key,
+  meepleBesetzt, finishTurn, find, key,
 } from '../js/engine/game.js';
 
 let failed = 0, passed = 0;
@@ -23,13 +24,18 @@ function ok(cond, msg) {
 }
 function eq(a, b, msg) { ok(a === b, `${msg} (erwartet ${b}, war ${a})`); }
 
-const zwei = (extra) => ({
-  players: [
-    { name: 'Anna', color: '#D6321A', type: 'human' },
-    { name: 'Ben', color: '#196CCD', type: 'human' },
-  ],
-  expansions: {}, deckScale: 1, ...extra,
-});
+// Ohne eigenes `deckIds` bekommt die Partie einen festen Stapel: sonst
+// hängt auch die Startkarte am Zufall, und damit das ganze Brett.
+const zwei = (extra) => {
+  const basis = {
+    players: [
+      { name: 'Anna', color: '#D6321A', type: 'human' },
+      { name: 'Ben', color: '#196CCD', type: 'human' },
+    ],
+    expansions: {}, deckScale: 1, ...extra,
+  };
+  return basis.deckIds ? basis : festerStapel(basis, 0x5ca1e);
+};
 
 /** Karte legen und Zug beenden, Meeple wahlweise auf ein Feature-Kürzel. */
 function zug(s, defId, x, y, rot, wahl = null) {
@@ -443,7 +449,7 @@ function referenzVerschmelzung(s) {
 
 /** Eine Partie durchspielen und bei jedem Zug einen Prüfer rufen. */
 function partie(seed, pruefer) {
-  const s = newGame({
+  const s = newGame(festerStapel({
     players: [
       { name: 'A', color: '#D6321A', type: 'ai1' },
       { name: 'B', color: '#196CCD', type: 'ai1' },
@@ -451,7 +457,7 @@ function partie(seed, pruefer) {
     ],
     expansions: { river: seed % 2 === 0, inns: seed % 3 === 0, king: seed % 5 === 0 },
     deckScale: 1,
-  });
+  }, seed));
   let schritte = 0;
   while (s.phase !== 'over' && schritte++ < 400) {
     if (s.phase === 'place') {
@@ -796,10 +802,17 @@ console.log('=== 17. Der gemeldete Fall: Karte mit zwei Städten ===');
       if (opts.filter((o) => o.t === 'field').length > wiesen) zuVieleWiesen++;
       const pl = s.players[s.current];
       if (pl.meeples <= 0 && pl.bigMeeples <= 0) return;
+      // Über das Gebiet vergleichen, nicht über das Segment. Zwei
+      // Stadtsegmente derselben Karte können nach dem Verschmelzen
+      // dasselbe Gebiet sein; angeboten wird es dann einmal, unter einem
+      // der beiden Segmente. Wer nach `fi` sucht, hält das andere für
+      // grundlos gesperrt.
+      const angeboten = new Set(opts.map((o) => find(s, p.fsegs[o.fi])));
       d.f.forEach((f, fi) => {
         if (f.t !== 'city') return;
-        if (opts.some((o) => o.fi === fi)) return;
-        if (s.roots.get(find(s, p.fsegs[fi])).meeples.length === 0) stadtOhneGrund++;
+        const w = find(s, p.fsegs[fi]);
+        if (angeboten.has(w)) return;
+        if (s.roots.get(w).meeples.length === 0) stadtOhneGrund++;
       });
     });
   }
@@ -929,6 +942,93 @@ console.log('=== 20. Jeder angebotene Punkt muss auch antippbar sein ===');
   eq(eng, 0, 'keine zwei Marken überdecken sich zur Hälfte');
   eq(weit, 0, 'keine Marke rückt weiter als erlaubt von ihrem Punkt weg');
   eq(draussen, 0, 'keine Marke rutscht über den Kartenrand');
+}
+
+// ============================================================
+// 21. Kein Gebiet fällt stillschweigend unter den Tisch
+//
+// Gemeldet als „meeple verfügbar aber stadt wird nicht angeboten": auf der
+// eben gelegten Karte liegt eine Stadt, der Spieler hat Gefolgsleute in der
+// Hand, und trotzdem erscheint dort keine Marke. Das Spiel hatte recht –
+// die Stadt reichte über den Bildrand hinaus, und am anderen Ende stand
+// schon ein fremder Ritter. Nur gesagt hat es das nicht.
+//
+// Geprüft wird deshalb, dass Angebot und Besetztmeldung zusammen **jedes**
+// Gebiet der Karte abdecken, dass sie sich nicht überschneiden, und dass
+// die Besetztmeldung wirklich nur besetzte Gebiete nennt.
+// ============================================================
+{
+  const s = newGame(zwei({ expansions: { river: false, inns: true, king: true } }));
+  const ids = Object.keys(DEFS).filter((d) => !DEFS[d].edges.includes('W'));
+  let gezogen = 0, luecken = 0, doppelt = 0, falschBesetzt = 0, gemeldet = 0;
+
+  // Ein paar Dutzend Züge quer durch die Motive, damit Gebiete auch
+  // wirklich verschmelzen und besetzt werden.
+  let x = 0, y = 0;
+  for (let n = 0; n < 1200 && gezogen < 220; n++) {
+    const defId = ids[n % ids.length];
+    s.drawn = defId;
+    s.phase = 'place';
+    const stellen = legalPlacementsFor(s, defId);
+    if (!stellen.length) continue;
+    const pl = stellen[gezogen % stellen.length];
+    placeCurrent(s, pl.x, pl.y, pl.rots[gezogen % pl.rots.length]);
+    gezogen++;
+
+    const p = s.placed[s.lastPlacedIdx];
+    const d = DEFS[p.defId];
+    const angebot = meepleOptions(s);
+    const besetzt = meepleBesetzt(s);
+
+    // Alle Gebiete der Karte, je Wurzel einmal.
+    const wurzeln = new Set();
+    p.fsegs.forEach((segId, fi) => {
+      if (d.f[fi].t === 'river') return;
+      wurzeln.add(find(s, segId));
+    });
+    const genannt = new Set();
+    for (const o of angebot) genannt.add(find(s, p.fsegs[o.fi]));
+    gemeldet += besetzt.length;
+    for (const b of besetzt) {
+      const w = find(s, p.fsegs[b.fi]);
+      if (genannt.has(w)) {
+        doppelt++;
+        ok(false, `${defId}: Gebiet ${b.t} steht gleichzeitig im Angebot und als besetzt`);
+      }
+      genannt.add(w);
+      if (!s.roots.get(w).meeples.length) {
+        falschBesetzt++;
+        ok(false, `${defId}: Gebiet ${b.t} als besetzt gemeldet, steht aber leer`);
+      }
+    }
+    // Hat der Spieler keine Gefolgsleute mehr, gibt es kein Angebot – dann
+    // fehlen die freien Gebiete zu Recht, und die Lücke ist keine.
+    const habe = s.players[s.current].meeples > 0 || s.players[s.current].bigMeeples > 0;
+    if (habe) {
+      for (const w of wurzeln) {
+        if (genannt.has(w)) continue;
+        luecken++;
+        ok(false, `${defId}: ein Gebiet wird weder angeboten noch als besetzt gezeigt`);
+      }
+    }
+
+    // Zug beenden, möglichst mit einem Gefolgsmann auf einer Stadt oder
+    // Wiese – die reichen weit und werden selten fertig, also bleiben sie
+    // stehen und sperren spätere Karten. Genau der gemeldete Fall.
+    const bleibt = angebot.find((o) => o.t === 'field' || o.t === 'city');
+    const setzen = bleibt || angebot[0] || null;
+    const gross = s.players[s.current].meeples <= 0;
+    finishTurn(s, setzen ? { fi: setzen.fi, big: gross } : null, { noAdvance: false });
+    x = p.x; y = p.y;
+  }
+  ok(gezogen >= 40, `genug Züge geprüft (waren ${gezogen})`);
+  // Ohne besetzte Gebiete prüft der Abschnitt nichts – dann wäre er grün,
+  // weil der Fall gar nicht vorkam.
+  ok(gemeldet >= 10, `der gemeldete Fall tritt auf (${gemeldet} besetzte Gebiete)`);
+  eq(luecken, 0, 'kein Gebiet bleibt ohne Marke und ohne Besetztmeldung');
+  eq(doppelt, 0, 'kein Gebiet ist gleichzeitig frei und besetzt');
+  eq(falschBesetzt, 0, 'als besetzt gemeldet wird nur, wo ein Gefolgsmann steht');
+  console.log(`   ${gezogen} Züge, ${gemeldet} besetzte Gebiete – jedes Gebiet ist benannt`);
 }
 
 console.log(`\n${passed} Prüfungen bestanden, ${failed} fehlgeschlagen.`);
