@@ -224,11 +224,22 @@ export function meepleOptions(s) {
   if (pl.meeples <= 0 && pl.bigMeeples <= 0) return [];
   const d = DEFS[p.defId];
   const out = [];
+  // Je Gebiet höchstens ein Angebot. Die Schleife läuft über die Segmente
+  // der Karte, aber zwei Segmente können nach dem Verschmelzen dasselbe
+  // Gebiet sein – eine Wiese, die außen herum auf dieselbe Karte
+  // zurückläuft, hätte sonst zwei Punkte. Regelwidrig wäre das nicht,
+  // beide führen auf denselben Bauernhof; am Brett sieht es aber nach zwei
+  // Wiesen aus, und die Kartenbewertung der KI zählt dieselbe Wiese
+  // doppelt. Tritt in rund anderthalb Prozent der Züge auf.
+  const gesehen = new Set();
   p.fsegs.forEach((segId, fi) => {
     const f = d.f[fi];
     if (f.t === 'river') return;
-    const data = s.roots.get(find(s, segId));
+    const wurzel = find(s, segId);
+    if (gesehen.has(wurzel)) return;
+    const data = s.roots.get(wurzel);
     if (data.meeples.length > 0) return;
+    gesehen.add(wurzel);
     out.push({ fi, segId, t: f.t, spot: f.spot });
   });
   return out;

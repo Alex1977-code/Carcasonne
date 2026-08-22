@@ -8,6 +8,7 @@ import {
 } from '../engine/game.js';
 import { chooseMove } from '../engine/ai.js';
 import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld } from './render.js';
+import { spreizeSpots } from './spot-layout.js';
 import { sfx, applySoundOptions, unlockAudio, startMusic, stopMusic, soundState } from './sound.js';
 import { Net } from './net.js';
 import { PLAYER_HEXES, PLAYER_NAMES } from './render/meeple-colors.js';
@@ -889,17 +890,41 @@ bc.addEventListener('wheel', (e) => {
   board.cam.scale = Math.min(200, Math.max(14, board.cam.scale * f));
 }, { passive: false });
 
+/**
+ * Die Marken der Auswahlphase in Weltkoordinaten, auseinandergerückt.
+ * Die Figur selbst steht später weiterhin auf ihrem unverschobenen Punkt –
+ * verschoben wird nur, was man antippt und sieht.
+ */
+function markenLegen(opts) {
+  const p = G.placed[G.lastPlacedIdx];
+  const roh = opts.map((o) => meepleSpotWorld(G, o));
+  const lokal = roh.map((w) => ({ x: w.wx - (p.x - 0.5), y: w.wy - (p.y - 0.5) }));
+  const weit = spreizeSpots(lokal);
+  return opts.map((o, i) => ({
+    wx: p.x - 0.5 + weit[i].x,
+    wy: p.y - 0.5 + weit[i].y,
+    fi: o.fi, t: o.t, color: G.players[G.current].color,
+  }));
+}
+
 function handleTap(sx, sy) {
   if (!G || G.phase === 'over') return;
   if (ui.meeple) { // Meeple-Phase: Punkt getroffen?
+    // Der NÄCHSTE Punkt gewinnt, nicht der erste in der Liste. Das ist
+    // nicht dasselbe: die Punkte kommen in der Reihenfolge der Segmente,
+    // und der Trefferkreis ist mit 0,2 Kachelbreiten größer als der
+    // Abstand mancher Punkte zueinander. Auf Motiv O liegt der Wiesenpunkt
+    // 0,178 Kachelbreiten neben dem Straßenpunkt – wer die Wiese antippte,
+    // setzte den Gefolgsmann auf die Straße, weil die Straße in der Liste
+    // vorher kommt. Betroffen waren elf Punkte auf acht Motiven.
     const s = board.cam.scale;
     let treffer = null, naechste = null, kleinster = Infinity;
     for (const spot of ui.meeple.spots) {
       const [px, py] = board.worldToScreen(spot.wx, spot.wy);
       const d = Math.hypot(px - sx, py - sy);
-      if (d < Math.max(24, s * 0.2)) { treffer = spot; break; }
       if (d < kleinster) { kleinster = d; naechste = spot; }
     }
+    if (naechste && kleinster < Math.max(24, s * 0.2)) treffer = naechste;
     // Kein Punkt genau getroffen? Dann zählt, wohin auf der eben gelegten
     // Karte getippt wurde. Auf Motiv F etwa liegen alle drei Punkte in der
     // Mittelspalte; wer die Stadt anfassen will, tippt auf das Goldband am
@@ -966,13 +991,7 @@ $('btnConfirm').addEventListener('click', () => {
     finishTurnSafe(null);
     return;
   }
-  ui.meeple = {
-    opts,
-    spots: opts.map(o => {
-      const w = meepleSpotWorld(G, o);
-      return { ...w, fi: o.fi, t: o.t, color: G.players[G.current].color };
-    }),
-  };
+  ui.meeple = { opts, spots: markenLegen(opts) };
   updateHud();
 });
 
@@ -1211,10 +1230,7 @@ window.__carc = {
     ui.sel = null;
     placeCurrent(G, x, y, rot);
     const opts = meepleOptions(G);
-    ui.meeple = opts.length
-      ? { opts, spots: opts.map((o) => ({ ...meepleSpotWorld(G, o), fi: o.fi, t: o.t,
-          color: G.players[G.current].color })) }
-      : null;
+    ui.meeple = opts.length ? { opts, spots: markenLegen(opts) } : null;
     updateHud();
     return opts.map((o) => ({ fi: o.fi, t: o.t, spot: o.spot }));
   },
