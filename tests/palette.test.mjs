@@ -6,7 +6,7 @@ import {
   checkPlayerColors, deltaE, mix, separationRing,
 } from '../js/ui/render/palette.js';
 import { PLAYER_PALETTE, MEEPLE_SURFACES, meepleRings } from '../js/ui/render/meeple-colors.js';
-import { glasToene, glasMittel } from '../js/ui/render/glass.js';
+import { glasToene, glasMittel, RAND_TIEFE, RAND_ABZUG } from '../js/ui/render/glass.js';
 
 let failed = 0, passed = 0;
 function ok(cond, msg) {
@@ -94,19 +94,39 @@ function ok(cond, msg) {
   ok(deltaE(mix('#FFFFFF', '#000000', 1), '#000000') < 1, 'mix(t=1) ergibt die zweite Farbe');
 }
 
-// ---------- 6. Die Bleiverglasung frisst den Farbabstand nicht ----------
+// ---------- 6. Der Schliff frisst den Farbabstand nicht ----------
 //
-// Die Figur ist nicht mehr einfarbig: neun Scheiben, jede etwas heller oder
-// dunkler und mit einem Stich ins Warme oder Kalte. Das ist der Stil – und
-// zugleich die Gefahr. Der erste Entwurf hellte den Kopf um 30 % auf und
-// legte 32 % Durchlicht darüber; aus dem Rot wurde ein Lachsrosa. Man sieht
-// so etwas am Bildschirm kaum und am Telefon gar nicht, aber die Palette
-// ist auf größten Abstand über Deuteranopie und Protanopie gerechnet, und
-// genau der geht dabei verloren.
+// Die Figur ist ein geschliffener Stein: viele Facetten, jede etwas heller
+// oder dunkler, und ein Saum, durch den der Untergrund scheint. Beides ist
+// der Stil – und beides kann den Abstand der Spielerfarben auffressen,
+// ohne dass es jemandem auffällt.
 //
-// Geprüft wird deshalb die gemalte Figur, nicht die Farbe, mit der sie
-// anfängt: jede einzelne Scheibe und der Flächenmittelwert.
+// Gemessen wurde beim Bauen zweierlei:
+//
+//   Die Spreizung der Facetten. Bei 0,30 lag die gemalte Figur ΔE 14 von
+//   ihrer Spielerfarbe entfernt und Grün/Schwarz bei ΔE 22,8.
+//
+//   Die Durchsicht. Eine gleichmäßig durchscheinende Figur geht gar nicht:
+//   was der Untergrund durchscheinen lässt, färbt alle Figuren gleich ein,
+//   und damit rücken sie zusammen. Schon bei 94 % Deckung fiel das
+//   schwächste Paar auf ΔE 22,6. Deshalb ist der Kern deckend und nur der
+//   Saum dünn – und deshalb wird der durchgelassene Anteil *multipliziert*
+//   statt überblendet: durch einen roten Stein sieht man rot gefiltertes
+//   Licht, nicht den Untergrund. Das allein bringt bei 95 % Deckung ΔE 25,5
+//   statt 23,8.
+//
+// Geprüft wird deshalb die Erscheinung über jedem Untergrund des Spiels,
+// nicht die Füllfarbe.
 {
+  // Aus der gezeichneten Figur gemessen (scratchpad/deckung-messen.mjs):
+  // mittlere Deckung innerhalb der Silhouette. Absichtlich pessimistisch
+  // eingesetzt – so, als wäre die ganze Figur so dünn wie ihr Mittelwert.
+  const GEMESSENE_DECKUNG = 0.95;
+
+  const zahl = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const zurueck = (a) => '#' + a.map((v) => Math.max(0, Math.min(255, Math.round(v)))
+    .toString(16).padStart(2, '0')).join('');
+
   const mittel = {};
   let schlimmste = 0, wo = '';
   for (const entry of PLAYER_PALETTE) {
@@ -115,25 +135,42 @@ function ok(cond, msg) {
     const ab = deltaE(m, entry.hex);
     if (ab > schlimmste) { schlimmste = ab; wo = entry.name; }
     ok(ab <= 10, `${entry.name}: gemalte Figur ΔE ${ab.toFixed(1)} von der Spielerfarbe entfernt`);
-    // Keine einzelne Scheibe darf für sich schon aussehen wie eine andere
+    // Keine einzelne Facette darf für sich schon aussehen wie eine andere
     // Spielerfarbe – sonst greift man am Brett nach dem falschen Kopf.
     for (const ton of glasToene(entry.hex)) {
       for (const fremd of PLAYER_PALETTE) {
         if (fremd.name === entry.name) continue;
         ok(deltaE(ton, fremd.hex) > deltaE(ton, entry.hex),
-          `${entry.name}: eine Scheibe (${ton}) liegt näher an ${fremd.name} als an der eigenen Farbe`);
+          `${entry.name}: eine Facette (${ton}) liegt näher an ${fremd.name} als an der eigenen Farbe`);
       }
     }
   }
-  // Und der Satz als Ganzes muss die Grenzwerte der Palette weiterhin
-  // halten – mit den gemalten Farben, nicht mit den nominellen.
-  const res = checkPlayerColors(mittel);
-  const schwaechste = res.pairs.reduce((a, p) => Math.min(a, p.min), Infinity);
-  for (const p of res.pairs) {
-    ok(p.passed, `gemalt, Paar ${p.a}/${p.b}: ΔE ${p.min.toFixed(1)} < ${CONTRAST_LIMITS.playerPair}`);
+
+  // Über jedem Untergrund, auf dem im Spiel eine Figur stehen kann.
+  const gruende = [...new Set(Object.values(MEEPLE_SURFACES).flat())];
+  let schwaechste = Infinity, schwachWo = '';
+  for (const grund of gruende) {
+    const drauf = {};
+    for (const entry of PLAYER_PALETTE) {
+      const v = zahl(mittel[entry.name]), u = zahl(grund);
+      drauf[entry.name] = zurueck([0, 1, 2].map((i) =>
+        v[i] * GEMESSENE_DECKUNG + (v[i] * u[i] / 255) * (1 - GEMESSENE_DECKUNG)));
+    }
+    const res = checkPlayerColors(drauf);
+    for (const p of res.pairs) {
+      if (p.min < schwaechste) { schwaechste = p.min; schwachWo = `${p.a}/${p.b} auf ${grund}`; }
+      ok(p.passed, `auf ${grund}, Paar ${p.a}/${p.b}: ΔE ${p.min.toFixed(1)} < ${CONTRAST_LIMITS.playerPair}`);
+    }
   }
-  console.log(`  Bleiglas: größte Abweichung von der Spielerfarbe ΔE ${schlimmste.toFixed(1)} (${wo})`);
-  console.log(`  Bleiglas: kleinster Paarabstand der gemalten Figuren ΔE ${schwaechste.toFixed(1)}`);
+
+  // Und der Saum muss ein Saum bleiben. Wer RAND_TIEFE hochdreht, macht die
+  // ganze Figur dünn – ein Arm ist nur zehn Einheiten dick, und genau das
+  // ist im ersten Entwurf passiert.
+  ok(RAND_TIEFE <= 4, `Saum bleibt ein Saum: ${RAND_TIEFE} von 100 Figurenhöhen`);
+  ok(RAND_ABZUG <= 0.7, `Saum bleibt nicht ganz durchsichtig: Abzug ${RAND_ABZUG}`);
+
+  console.log(`  Schliff: größte Abweichung von der Spielerfarbe ΔE ${schlimmste.toFixed(1)} (${wo})`);
+  console.log(`  Schliff: schwächstes Paar über allen Untergründen ΔE ${schwaechste.toFixed(1)} (${schwachWo})`);
 }
 
 console.log(`\n${passed} Tests bestanden, ${failed} fehlgeschlagen.`);

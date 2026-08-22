@@ -1279,6 +1279,8 @@ refreshMenu();
 // Debug-/Test-Hook (auch nützlich als „Zug vorschlagen“)
 window.__carc = {
   get state() { return G; },
+  /** Das Brett – für Prüfläufe, die die Kamera bewegen müssen. */
+  get brett() { return board; },
   /**
    * Eine bestimmte Karte an eine bestimmte Stelle legen und in die
    * Meeple-Phase gehen – für Prüfläufe. Ohne das lässt sich ein einzelnes
