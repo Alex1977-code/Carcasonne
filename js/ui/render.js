@@ -9,7 +9,7 @@ import { find } from '../engine/game.js';
 import { drawFields } from './render/fields.js';
 import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
-import { KOERPER, facetten, facettenTon, RAND_TIEFE, RAND_ABZUG } from './render/glass.js';
+import { KOERPER, facetten, glasToene, LICHT, RAND_TIEFE, RAND_ABZUG } from './render/glass.js';
 import { PALETTE, shade as pshade, withAlpha, mix } from './render/palette.js';
 import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset } from './render/ambience.js';
 import { paintingFor, loadPaintings, onPaintingLoaded } from './render/paintings.js';
@@ -129,13 +129,18 @@ const BEREICHE = KOERPER.map((k) => ({
   facetten: facetten(k).map((f) => ({ ...f, pfad: new Path2D(f.d) })),
 }));
 
-/** Wo es blitzt: Knoten des Schliffs auf der Lichtseite. */
+/**
+ * Wo es blitzt: Knoten des Schliffs auf der Lichtseite.
+ *
+ * Weniger und kleiner als im ersten Anlauf. Dort waren es breite weiße
+ * Kreuze, und die sahen aufgeklebt aus – ein Blitz an einem Stein ist ein
+ * Punkt mit kurzen Strahlen, kein Stern.
+ */
 const FUNKEN = [
-  { x: 43, y: 16, r: 7.0, a: 0.95 },
-  { x: 41, y: 45, r: 4.6, a: 0.70 },
-  { x: 30, y: 60, r: 4.0, a: 0.60 },
-  { x: 60, y: 39, r: 3.4, a: 0.50 },
-  { x: 38, y: 78, r: 3.8, a: 0.55 },
+  { x: 43, y: 17, r: 4.4, a: 0.95 },
+  { x: 40, y: 46, r: 2.8, a: 0.70 },
+  { x: 27, y: 58, r: 2.4, a: 0.60 },
+  { x: 37, y: 79, r: 2.2, a: 0.55 },
 ];
 
 // Die fertige Figur je Farbe einmal zeichnen und aufheben. Über sechzig
@@ -184,17 +189,26 @@ function glasFigur(color) {
   g.fillStyle = color;
   g.fill(MEEPLE_PATH);
 
+  // Die Farben kommen aus glasToene: dort ist der Mittelwert schon auf die
+  // Spielerfarbe zurückgerechnet. Wer hier die rohen Töne nähme, bekäme eine
+  // Figur, die mit wachsender Spreizung ins Helle abwandert.
+  const toene = glasToene(color);
+  let nr = 0;
   for (const b of BEREICHE) {
     g.save();
     g.clip(b.pfad);
     for (const f of b.facetten) {
-      g.fillStyle = facettenTon(color, f.ton);
+      g.fillStyle = toene[nr++];
       g.fill(f.pfad);
       // Die Kante zur Nachbarfacette. Ein Schliff hat keine weichen
       // Übergänge; ohne die Kante verschwimmen zwei Facetten mit ähnlicher
-      // Neigung zu einer Fläche.
-      g.lineWidth = 0.5;
-      g.strokeStyle = 'rgba(255,255,255,0.13)';
+      // Neigung zu einer Fläche. Auf der Lichtseite blitzt die Kante, auf
+      // der Schattenseite bleibt sie dunkel – so herum sieht man den Grat.
+      const licht = f.winkel === null ? 0 : Math.cos(f.winkel - LICHT);
+      g.lineWidth = 0.45;
+      g.strokeStyle = licht > 0
+        ? `rgba(255,255,255,${(0.10 + licht * 0.30).toFixed(3)})`
+        : `rgba(20,10,0,${(0.08 - licht * 0.16).toFixed(3)})`;
       g.stroke(f.pfad);
     }
     g.restore();
@@ -258,11 +272,13 @@ function glasFigur(color) {
     g.beginPath();
     g.arc(f.x, f.y, f.r, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = `rgba(255,255,255,${(f.a * 0.9).toFixed(3)})`;
-    g.lineWidth = Math.max(0.5, f.r * 0.13);
+    g.strokeStyle = `rgba(255,255,255,${(f.a * 0.85).toFixed(3)})`;
+    g.lineWidth = Math.max(0.35, f.r * 0.11);
+    g.lineCap = 'round';
+    const arm = f.r * 1.35;
     g.beginPath();
-    g.moveTo(f.x - f.r, f.y); g.lineTo(f.x + f.r, f.y);
-    g.moveTo(f.x, f.y - f.r); g.lineTo(f.x, f.y + f.r);
+    g.moveTo(f.x - arm, f.y); g.lineTo(f.x + arm, f.y);
+    g.moveTo(f.x, f.y - arm); g.lineTo(f.x, f.y + arm);
     g.stroke();
   }
   g.restore();
