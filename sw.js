@@ -1,10 +1,23 @@
 // Service Worker – Offline-Cache mit automatischen Updates.
-// Strategie: Seiten (HTML) immer zuerst frisch aus dem Netz laden
-// (Offline-Fallback aus dem Cache), alle übrigen Dateien aus dem Cache
-// liefern und im Hintergrund aktualisieren („stale-while-revalidate“).
-// So bekommen installierte Geräte ohne manuelle Versionspflege immer
-// spätestens beim nächsten Öffnen die neueste Version.
-const CACHE = 'carcassonne-v12';
+//
+// Strategie: alles zuerst aus dem Netz, mit dem Cache als Rückfall. Wer
+// online ist, bekommt damit beim Öffnen den aktuellen Stand; wer offline
+// ist, spielt aus dem Cache weiter.
+//
+// Vorher stand hier „stale-while-revalidate": erst aus dem Cache
+// ausliefern, dann im Hintergrund erneuern. Das hat eine unangenehme
+// Folge, die auch aufgetreten ist – nach einer Änderung zeigt das Gerät
+// beim nächsten Öffnen noch die alte Fassung, und erst beim übernächsten
+// die neue. Auf einem Telefon, das man einmal am Tag aufmacht, heißt das:
+// die Korrektur kommt einen Tag zu spät, und man sucht den Fehler an der
+// falschen Stelle.
+//
+// Das Spiel ist klein genug, dass sich das Netz-zuerst leisten lässt. Die
+// Wartezeit ist gedeckelt: kommt binnen drei Sekunden nichts, gilt der
+// Cache. Bei schlechtem Empfang startet das Spiel dadurch genauso schnell
+// wie vorher.
+const CACHE = 'carcassonne-v13';
+const FRIST = 3000;   // so lange wird höchstens auf das Netz gewartet
 const ASSETS = [
   './',
   './index.html',
@@ -102,35 +115,47 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+/** Netz mit Frist. Läuft sie ab, wird abgebrochen und der Cache genommen. */
+function ausDemNetz(req) {
+  const steuer = new AbortController();
+  const uhr = setTimeout(() => steuer.abort(), FRIST);
+  return fetch(req, { signal: steuer.signal }).finally(() => clearTimeout(uhr));
+}
+
+async function beantworten(req, istSeite) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await ausDemNetz(req);
+    if (res && res.ok) {
+      cache.put(istSeite ? './index.html' : req, res.clone());
+      return res;
+    }
+    // 404 und Ähnliches nicht in den Cache schreiben, aber weiterreichen,
+    // wenn nichts Besseres da ist.
+    const ersatz = await cache.match(req);
+    return ersatz || res;
+  } catch {
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    if (istSeite) {
+      const seite = await cache.match('./index.html');
+      if (seite) return seite;
+    }
+    return new Response('', { status: 504, statusText: 'offline' });
+  }
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || !req.url.startsWith(self.location.origin)) return;
+  const istSeite = req.mode === 'navigate' || req.url.endsWith('/index.html');
+  e.respondWith(beantworten(req, istSeite));
+});
 
-  // Navigation/HTML: Netz zuerst, Cache als Offline-Fallback
-  if (req.mode === 'navigate' || req.url.endsWith('/index.html')) {
-    e.respondWith(
-      fetch(req).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put('./index.html', copy));
-        return res;
-      }).catch(() =>
-        caches.match(req).then(hit => hit || caches.match('./index.html'))
-      )
-    );
-    return;
-  }
-
-  // Übrige Dateien: sofort aus dem Cache, parallel im Hintergrund erneuern
-  e.respondWith(
-    caches.match(req).then(hit => {
-      const refresh = fetch(req).then(res => {
-        if (res && res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
-        }
-        return res;
-      }).catch(() => hit);
-      return hit || refresh;
-    })
-  );
+// Die Seite darf fragen, welcher Stand gerade ausgeliefert wird. Ohne das
+// steht in der Fußzeile eine fest verdrahtete Zahl, die sich nie ändert –
+// und dann lässt sich am Gerät nicht feststellen, ob eine Korrektur
+// überhaupt angekommen ist.
+self.addEventListener('message', (e) => {
+  if (e.data === 'version') e.source?.postMessage({ version: CACHE });
 });

@@ -1165,6 +1165,16 @@ function updateHudSafe() { if (G && currentScreen === 'game') updateHud(); }
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline-Cache optional */ });
+    // Den tatsächlich ausgelieferten Stand in die Fußzeile schreiben. Vorher
+    // stand dort eine fest verdrahtete Zahl; am Gerät ließ sich damit nicht
+    // feststellen, ob eine Korrektur überhaupt angekommen war.
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      const el = document.getElementById('stand');
+      if (el && e.data && e.data.version) el.textContent = e.data.version.replace('carcassonne-', '');
+    });
+    navigator.serviceWorker.ready.then((reg) => {
+      (reg.active || navigator.serviceWorker.controller)?.postMessage('version');
+    }).catch(() => { /* ohne Service-Worker bleibt die Fußzeile, wie sie ist */ });
   });
 }
 
