@@ -53,6 +53,40 @@ Deshalb wird jeder neue Bogen vor der Übernahme **gemessen**, nicht
 angesehen: `tools/kacheln-schneiden.mjs` schneidet, die Messung sitzt in der
 Prüfroutine daneben.
 
+## Der Randvertrag regelt die Naht, nicht das Aussehen
+
+Gemeldet als „wege sehen unterschiedlich aus", und der Einwand stimmt. Der
+Vertrag sagt, wo ein Weg austritt und wie breit das Band ist. Was *im* Band
+gemalt ist, sagt er nicht — und genau daran laufen die Lieferungen
+auseinander.
+
+    node tools/wege-vergleichen.mjs
+
+Der ununterbrochene helle Streifen macht zwischen **71 %** (K, ein glatter
+Elfenbeinstreifen mit dünnem Goldrand) und **21 %** (EC_CITY_ROADPASS, ein
+schmaler Cremestreifen in dichtem Goldgitter) des Bandes aus. Stufenlos
+dazwischen alles andere. Die Sättigung läuft von 17 % (EC_INN_STRAIGHT,
+fast weiß) bis 34 % (RV_BRIDGE, warmes Creme). Jede dieser Karten hält den
+Vertrag; nebeneinandergelegt sehen sie nach zwei Spielen aus.
+
+Zwei Werkzeuge, zwei Absichten — die Zahlen widersprechen sich nicht,
+sie messen Verschiedenes:
+
+* `karten-pruefen.mjs` überbrückt beim Messen Lücken bis 2 %, weil sonst
+  Goldornament im Weg die Karte zu Unrecht als zu schmal meldet. Für die
+  Naht ist das richtig.
+* `wege-vergleichen.mjs` überbrückt nichts. Der Unterschied zwischen beiden
+  Zahlen **ist** die Ornamentdichte.
+
+Beide messen nur bis 5 % Tiefe. Tiefer geht es nicht: die Messung läuft
+senkrecht zur Kante, und ein gekrümmter Weg verlässt diese Senkrechte nach
+wenigen Prozent. Ein Entwurf, der bis 22 % maß, meldete für P einen Schwund
+von −768 %. Was ein Weg in der Kartenmitte tut, zeigt nur der Kontaktbogen.
+
+Die Breite des hellen Kerns ist seit diesem Befund eine **Beanstandung**,
+keine Anmerkung mehr. Vorher stand im Code, ein schmaler Kern sei
+„Geschmackssache" — das war falsch.
+
 ## Jeden neuen Bogen erst messen
 
     node tools/bogen-pruefen.mjs <bild.png> U V W X

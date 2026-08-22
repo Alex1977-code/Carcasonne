@@ -341,17 +341,31 @@ for (let i = 0; i < auftrag.length; i++) {
   for (const u of k.uebergaenge) {
     const istWeg = u.art === 'R';
     const dm = Math.abs(u.mitte - 50);
-    // Hart ist, was die Karte unbrauchbar macht: die Lage der Grenze gegen
-    // die Wiese und ihre Breite. Daran hängt, ob zwei Karten an der Naht
-    // zusammenpassen. Ein schmaler heller Kern ist dagegen Geschmackssache –
-    // er wird gemeldet, aber nicht beanstandet.
+    // Zum Randvertrag gehören drei Maße, nicht zwei: die Lage der Mitte,
+    // die Breite des ganzen Bandes und die Breite des hellen Kerns darin.
+    //
+    // Hier stand vorher, ein schmaler Kern sei „Geschmackssache" und werde
+    // nur gemeldet. Das war falsch. Gemessen über alle 26 Wegkarten läuft
+    // der Anteil des Kerns am Band stufenlos von 71 % auf 20 % – auf der
+    // einen Karte ein breiter Elfenbeinstreifen mit dünnem Goldrand, auf der
+    // nächsten ein schmaler Cremestreifen in einer breiten Goldfassung.
+    // Beide halten Lage und Bandbreite, beide kamen deshalb durch, und
+    // nebeneinandergelegt sehen sie nach zwei verschiedenen Spielen aus.
+    // Genau so ist es gemeldet worden: „wege sehen unterschiedlich aus".
+    //
+    // Die Sollwerte aus den Bögen 01–05 – Kern 10,3–11 %, Band 15–16 % –
+    // ergeben einen Kernanteil von 69 %. Die Karten, die das halten, sind
+    // die mit dem breiten hellen Weg.
     const anmerkungen = [], hinweise = [];
     if (dm > 1.5) anmerkungen.push(`${dm.toFixed(1)} % aus der Mitte`);
     if (istWeg) {
       if (u.band < 13 || u.band > 18.5) {
         anmerkungen.push(`Band ${u.band < 13 ? 'zu schmal' : 'zu breit'} (soll 15–16 %)`);
       }
-      if (u.kern < 8) hinweise.push(`heller Kern nur ${u.kern.toFixed(1)} %, sonst 10,5–11 %`);
+      if (u.kern < 8.5 || u.kern > 13) {
+        anmerkungen.push(`heller Kern ${u.kern < 8.5 ? 'zu schmal' : 'zu breit'}`
+          + ` mit ${u.kern.toFixed(1)} % (soll 10,3–11 %)`);
+      }
     } else if (u.kern < 15 || u.kern > 21) {
       anmerkungen.push(`Fluss ${u.kern < 15 ? 'zu schmal' : 'zu breit'} (soll 18–19 %)`);
     }
