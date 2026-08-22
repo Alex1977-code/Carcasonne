@@ -114,32 +114,40 @@ function pipe(f, t0, dur, vol = 0.13, dest = null) {
   flt.Q.value = 1.4;
   out.connect(flt); flt.connect(dest || master);
 
+  // Dreieck statt Rechteck. Ein Rechteck hat die ungeraden Obertöne fast
+  // ungedämpft und schneidet dadurch – als Melodie, die stundenlang neben
+  // einem Brettspiel läuft, ist das nicht auszuhalten. Das Dreieck hat
+  // dieselbe Bauart, nur ohne die Schärfe.
   const o = ctx.createOscillator();
-  o.type = 'square';
+  o.type = 'triangle';
   o.frequency.value = f;
   o.connect(out);
 
-  // Vibrato, das erst nach dem Ansatz aufgeht
+  // Vibrato, das erst nach dem Ansatz aufgeht – langsam und flach, sonst
+  // klingt es nach Leierkasten statt nach Atem.
   const lfo = ctx.createOscillator();
   const lfoAmt = ctx.createGain();
-  lfo.frequency.value = 5.2;
+  lfo.frequency.value = 4.1;
   lfoAmt.gain.setValueAtTime(0, t0);
-  lfoAmt.gain.linearRampToValueAtTime(f * 0.006, t0 + Math.min(0.4, dur * 0.6));
+  lfoAmt.gain.linearRampToValueAtTime(f * 0.0035, t0 + Math.min(0.5, dur * 0.7));
   lfo.connect(lfoAmt); lfoAmt.connect(o.frequency);
-
-  // Anblasgeräusch
-  const br = ctx.createBufferSource();
-  br.buffer = noiseBuffer();
-  const brf = ctx.createBiquadFilter();
-  brf.type = 'bandpass'; brf.frequency.value = f * 3; brf.Q.value = 1.2;
-  const brg = ctx.createGain();
-  brg.gain.setValueAtTime(vol * 0.5, t0);
-  brg.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.09);
-  br.connect(brf); brf.connect(brg); brg.connect(dest || master);
 
   o.start(t0); o.stop(t0 + dur + 0.05);
   lfo.start(t0); lfo.stop(t0 + dur + 0.05);
-  br.start(t0); br.stop(t0 + 0.12);
+
+  // Anblasgeräusch nur bei längeren Tönen und nur als Hauch. Auf jedem
+  // Achtel ein Zischen war das, was den Satz unruhig gemacht hat.
+  if (dur > 0.5) {
+    const br = ctx.createBufferSource();
+    br.buffer = noiseBuffer();
+    const brf = ctx.createBiquadFilter();
+    brf.type = 'bandpass'; brf.frequency.value = f * 3; brf.Q.value = 1.2;
+    const brg = ctx.createGain();
+    brg.gain.setValueAtTime(vol * 0.12, t0);
+    brg.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.12);
+    br.connect(brf); brf.connect(brg); brg.connect(dest || master);
+    br.start(t0); br.stop(t0 + 0.15);
+  }
 }
 
 /** Tabor: Rahmentrommel. Fell (Rauschen) über einem kurzen Bauchton. */
@@ -228,7 +236,7 @@ const SCALE = [
 ];
 const TONIC = 7;          // d4
 const DOMINANT = 11;      // a4
-const EIGHTH = 0.30;      // Achtel in Sekunden ≈ 100 bpm in 6/8
+const EIGHTH = 0.44;      // Achtel in Sekunden ≈ 68 bpm in 6/8
 
 let musicGain = null, droneGain = null, melGain = null, percGain = null;
 let droneNodes = [];
@@ -256,7 +264,8 @@ function makePhrase() {
     // springt eine gesungene Melodie so gut wie nie.
     const step = pick([-1, -1, -1, 1, 1, 1, -2, 2, 0, -3, 3]);
     degree = Math.max(4, Math.min(14, degree + step));
-    out.push({ deg: degree, len: Math.random() < 0.72 ? 1 : 2 });
+    const w = Math.random();
+    out.push({ deg: degree, len: w < 0.42 ? 1 : w < 0.82 ? 2 : 3 });
   }
   // Kadenz: Vorhalt einen Schritt über dem Ziel, dann das Ziel
   out.push({ deg: goal + 1, len: 1 });
@@ -282,8 +291,8 @@ function startDrone(t0) {
   // das den Bordun lebendig macht.
   const wheel = ctx.createOscillator();
   const wheelAmt = ctx.createGain();
-  wheel.frequency.value = 4.3;
-  wheelAmt.gain.value = 0.055;
+  wheel.frequency.value = 0.62;
+  wheelAmt.gain.value = 0.03;
   wheel.connect(wheelAmt); wheelAmt.connect(droneGain.gain);
   wheel.start(t0);
   droneNodes.push(wheel, wheelAmt);
@@ -291,16 +300,34 @@ function startDrone(t0) {
 
 function scheduler() {
   if (!soundState.music || !ctx) return;
-  const horizon = ctx.currentTime + 0.7;
-  while (nextAt < horizon) {
+  const jetzt = ctx.currentTime;
+  if (!(jetzt >= 0)) return;
+
+  // Nachholen ist verboten. Wird die Seite in den Hintergrund geschoben –
+  // Telefon gesperrt, App gewechselt, und sei es nur für einen Moment –,
+  // dann bremst der Browser setInterval aus, während die Uhr des
+  // Audiokontexts weiterläuft. Beim Zurückkommen liegt nextAt weit
+  // zurück, und die Schleife würde in einem Rutsch hunderte Töne
+  // ansetzen, alle mit einem Zeitpunkt in der Vergangenheit. Das legt das
+  // Telefon lahm. Statt nachzuholen wird der Faden neu angeknüpft.
+  if (jetzt - nextAt > 1.0) {
+    nextAt = jetzt + 0.15;
+    phrase = [];
+    beat = 0; restUntil = 0; taborBars = 0;
+  }
+
+  const horizon = jetzt + 0.7;
+  // Zweiter Riegel: was auch immer schiefgeht, in einem Durchgang werden
+  // nie mehr als zwei Dutzend Ereignisse angesetzt.
+  let sicherung = 24;
+  while (nextAt < horizon && sicherung-- > 0) {
     const t0 = nextAt;
 
     // Tabor: 6/8, schwerer Schlag auf 1 und 4
     if (taborBars > 0) {
       const pos = beat % 6;
-      if (pos === 0) tabor(t0, 0.20, true, percGain);
-      else if (pos === 3) tabor(t0, 0.15, true, percGain);
-      else if (pos === 2 || pos === 5) tabor(t0, 0.10, false, percGain);
+      if (pos === 0) tabor(t0, 0.11, true, percGain);
+      else if (pos === 3) tabor(t0, 0.08, true, percGain);
       if (pos === 5) {
         taborBars--;
         if (taborBars === 0) restUntil = Math.max(restUntil, beat);
@@ -311,7 +338,7 @@ function scheduler() {
       if (!phrase.length) {
         phrase = makePhrase();
         // Nach jeder zweiten oder dritten Phrase greift der Trommler ein.
-        if (taborBars === 0 && Math.random() < 0.45) taborBars = 2 + Math.floor(Math.random() * 3);
+        if (taborBars === 0 && Math.random() < 0.15) taborBars = 2;
       }
       const n = phrase.shift();
       const f = SCALE[Math.max(0, Math.min(SCALE.length - 1, n.deg))];
@@ -321,7 +348,7 @@ function scheduler() {
       if (n.len === 3) pluck(SCALE[Math.max(0, n.deg - 7)], t0, 0.10, 1.6, melGain);
       beat += n.len;
       nextAt += dur;
-      if (!phrase.length) restUntil = beat + 2 + Math.floor(Math.random() * 4);
+      if (!phrase.length) restUntil = beat + 5 + Math.floor(Math.random() * 7);
     } else {
       beat += 1;
       nextAt += EIGHTH;
@@ -334,11 +361,11 @@ export function startMusic() {
   if (!ac()) return;
   if (!musicGain) {
     musicGain = ctx.createGain();
-    musicGain.gain.value = 0.72;
+    musicGain.gain.value = 0.46;
     musicGain.connect(master);
     droneGain = ctx.createGain(); droneGain.gain.value = 0.13; droneGain.connect(musicGain);
-    melGain = ctx.createGain(); melGain.gain.value = 0.85; melGain.connect(musicGain);
-    percGain = ctx.createGain(); percGain.gain.value = 0.5; percGain.connect(musicGain);
+    melGain = ctx.createGain(); melGain.gain.value = 0.62; melGain.connect(musicGain);
+    percGain = ctx.createGain(); percGain.gain.value = 0.32; percGain.connect(musicGain);
   }
   const t0 = ctx.currentTime + 0.1;
   startDrone(t0);
@@ -371,3 +398,17 @@ export function unlockAudio() {
   ac();
   if (soundState.music) startMusic();
 }
+
+// Im Hintergrund wird nichts geplant. Der Browser drosselt setInterval,
+// sobald die Seite verdeckt ist, die Uhr des Audiokontexts läuft aber
+// weiter – der Terminplan liefe dann jedes Mal aus dem Ruder. Beim
+// Zurückkommen fängt die Musik einfach neu an.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (clock) { clearInterval(clock); clock = null; }
+  } else if (soundState.music && ctx && !clock) {
+    nextAt = ctx.currentTime + 0.2;
+    phrase = []; beat = 0; restUntil = 0; taborBars = 0;
+    clock = setInterval(scheduler, 200);
+  }
+});

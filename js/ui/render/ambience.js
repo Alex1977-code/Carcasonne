@@ -276,25 +276,30 @@ export function candleSprite(size = 512) {
  * dieser Reihenfolge, sonst frisst die Vignette das Licht wieder auf.
  */
 export function paintCandleLight(ctx, w, h, candle) {
-  const cx = w * 0.38 + candle.dx;
-  const cy = h * 0.26 + candle.dy;
-  // Der Abfall muss innerhalb des Bildes stattfinden, sonst liegt alles im
-  // hellen Kern und es sieht nach Tageslicht aus.
+  // Die Kerze steht etwas oberhalb der Mitte, nicht im oberen Viertel. Auf
+  // einem hohen Telefonbildschirm liegt sonst die ganze untere Hälfte im
+  // Abfall – gemessen war der unterste Streifen auf ein Drittel der oberen
+  // Helligkeit abgedunkelt, und genau dort sitzen Kartenablage und Knöpfe.
+  const cx = w * 0.40 + candle.dx;
+  const cy = h * 0.36 + candle.dy;
   // Nicht nur die Helligkeit flackert, auch der Lichtkreis atmet – das ist
   // der Teil, den man tatsächlich sieht. Reine Helligkeitsschwankung fiel
   // im Bild mit gut 1 % kaum auf.
-  const falloff = Math.hypot(w, h) * 0.78 * (1 + (candle.intensity - 1) * 0.55);
+  const falloff = Math.hypot(w, h) * 0.98 * (1 + (candle.intensity - 1) * 0.55);
 
-  // 1. Abend: die Szene wird gedämpft und warm eingefärbt.
+  // 1. Abend: die Szene wird gedämpft und warm eingefärbt. Der dunkelste
+  //    Punkt bleibt bei gut der Hälfte stehen – tiefer wird aus Stimmung
+  //    Unlesbarkeit, und auf einem Telefon in einem hellen Raum sieht man
+  //    dort nichts mehr.
   ctx.save();
   ctx.globalCompositeOperation = 'multiply';
   const dusk = ctx.createRadialGradient(cx, cy, falloff * 0.04, cx, cy, falloff);
-  dusk.addColorStop(0, `rgba(255,247,232,${1})`);
-  dusk.addColorStop(0.22, 'rgba(240,214,175,1)');
-  dusk.addColorStop(0.46, 'rgba(186,142,98,1)');
-  dusk.addColorStop(0.70, 'rgba(104,71,46,1)');
-  dusk.addColorStop(0.88, 'rgba(52,34,22,1)');
-  dusk.addColorStop(1, 'rgba(26,16,10,1)');
+  dusk.addColorStop(0, 'rgba(255,250,240,1)');
+  dusk.addColorStop(0.24, 'rgba(248,232,206,1)');
+  dusk.addColorStop(0.48, 'rgba(226,198,164,1)');
+  dusk.addColorStop(0.70, 'rgba(198,167,133,1)');
+  dusk.addColorStop(0.88, 'rgba(172,142,112,1)');
+  dusk.addColorStop(1, 'rgba(154,126,100,1)');
   ctx.fillStyle = dusk;
   ctx.fillRect(0, 0, w, h);
   ctx.restore();

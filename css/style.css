@@ -28,9 +28,11 @@ html, body {
    Brett sein eigenes Licht mit und die Bedienleisten müssen hell bleiben. */
 #vignette {
   position: fixed; inset: 0; z-index: 5; pointer-events: none;
-  background: radial-gradient(118% 96% at 38% 26%,
-    rgba(0,0,0,0) 0%, rgba(0,0,0,0) 32%, rgba(12,7,3,0.26) 62%,
-    rgba(10,6,2,0.58) 85%, rgba(8,4,2,0.74) 100%);
+  /* Nur eine Andeutung. Bei 0,74 Schwarz am Rand war der untere Bildschirm
+     auf einem Telefon nicht mehr lesbar. */
+  background: radial-gradient(126% 108% at 40% 36%,
+    rgba(0,0,0,0) 0%, rgba(0,0,0,0) 38%, rgba(12,7,3,0.12) 66%,
+    rgba(10,6,2,0.26) 86%, rgba(8,4,2,0.34) 100%);
 }
 body.in-game #vignette { display: none; }
 
