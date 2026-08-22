@@ -6,6 +6,7 @@ import {
   checkPlayerColors, deltaE, mix, separationRing,
 } from '../js/ui/render/palette.js';
 import { PLAYER_PALETTE, MEEPLE_SURFACES, meepleRings } from '../js/ui/render/meeple-colors.js';
+import { glasToene, glasMittel } from '../js/ui/render/glass.js';
 
 let failed = 0, passed = 0;
 function ok(cond, msg) {
@@ -91,6 +92,48 @@ function ok(cond, msg) {
   // Mischung ist monoton – Schutz gegen versehentliches Vertauschen
   ok(deltaE(mix('#FFFFFF', '#000000', 0), '#FFFFFF') < 1, 'mix(t=0) ergibt die erste Farbe');
   ok(deltaE(mix('#FFFFFF', '#000000', 1), '#000000') < 1, 'mix(t=1) ergibt die zweite Farbe');
+}
+
+// ---------- 6. Die Bleiverglasung frisst den Farbabstand nicht ----------
+//
+// Die Figur ist nicht mehr einfarbig: neun Scheiben, jede etwas heller oder
+// dunkler und mit einem Stich ins Warme oder Kalte. Das ist der Stil – und
+// zugleich die Gefahr. Der erste Entwurf hellte den Kopf um 30 % auf und
+// legte 32 % Durchlicht darüber; aus dem Rot wurde ein Lachsrosa. Man sieht
+// so etwas am Bildschirm kaum und am Telefon gar nicht, aber die Palette
+// ist auf größten Abstand über Deuteranopie und Protanopie gerechnet, und
+// genau der geht dabei verloren.
+//
+// Geprüft wird deshalb die gemalte Figur, nicht die Farbe, mit der sie
+// anfängt: jede einzelne Scheibe und der Flächenmittelwert.
+{
+  const mittel = {};
+  let schlimmste = 0, wo = '';
+  for (const entry of PLAYER_PALETTE) {
+    const m = glasMittel(entry.hex);
+    mittel[entry.name] = m;
+    const ab = deltaE(m, entry.hex);
+    if (ab > schlimmste) { schlimmste = ab; wo = entry.name; }
+    ok(ab <= 10, `${entry.name}: gemalte Figur ΔE ${ab.toFixed(1)} von der Spielerfarbe entfernt`);
+    // Keine einzelne Scheibe darf für sich schon aussehen wie eine andere
+    // Spielerfarbe – sonst greift man am Brett nach dem falschen Kopf.
+    for (const ton of glasToene(entry.hex)) {
+      for (const fremd of PLAYER_PALETTE) {
+        if (fremd.name === entry.name) continue;
+        ok(deltaE(ton, fremd.hex) > deltaE(ton, entry.hex),
+          `${entry.name}: eine Scheibe (${ton}) liegt näher an ${fremd.name} als an der eigenen Farbe`);
+      }
+    }
+  }
+  // Und der Satz als Ganzes muss die Grenzwerte der Palette weiterhin
+  // halten – mit den gemalten Farben, nicht mit den nominellen.
+  const res = checkPlayerColors(mittel);
+  const schwaechste = res.pairs.reduce((a, p) => Math.min(a, p.min), Infinity);
+  for (const p of res.pairs) {
+    ok(p.passed, `gemalt, Paar ${p.a}/${p.b}: ΔE ${p.min.toFixed(1)} < ${CONTRAST_LIMITS.playerPair}`);
+  }
+  console.log(`  Bleiglas: größte Abweichung von der Spielerfarbe ΔE ${schlimmste.toFixed(1)} (${wo})`);
+  console.log(`  Bleiglas: kleinster Paarabstand der gemalten Figuren ΔE ${schwaechste.toFixed(1)}`);
 }
 
 console.log(`\n${passed} Tests bestanden, ${failed} fehlgeschlagen.`);

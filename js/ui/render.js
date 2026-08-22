@@ -9,7 +9,8 @@ import { find } from '../engine/game.js';
 import { drawFields } from './render/fields.js';
 import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
-import { PALETTE, shade as pshade, withAlpha } from './render/palette.js';
+import { SCHEIBEN as SCHEIBEN_ROH, RUTEN, BLEI, scheibenTon } from './render/glass.js';
+import { PALETTE, shade as pshade, withAlpha, mix } from './render/palette.js';
 import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset } from './render/ambience.js';
 import { paintingFor, loadPaintings, onPaintingLoaded } from './render/paintings.js';
 import { drawTown } from './render/buildings.js';
@@ -39,13 +40,15 @@ export function rotPoint([x, y], rot) {
   return [x, y];
 }
 
-// Farbe aufhellen (f>0) oder abdunkeln (f<0)
+// Farbe aufhellen (f>0) oder abdunkeln (f<0). Rückgabe als Hex, damit sich
+// das Ergebnis weiterverrechnen lässt – mix() aus palette.js liest Hex.
 function shade(hex, f) {
   const n = parseInt(hex.slice(1), 16);
   let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   if (f >= 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
   else { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
-  return `rgb(${r | 0},${g | 0},${b | 0})`;
+  const z = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return `#${z(r)}${z(g)}${z(b)}`;
 }
 
 const EDGE_MID = [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]];
@@ -89,56 +92,206 @@ const MEEPLE_PATH = new Path2D(
   'C33 13.6 40.6 6 50 6 Z'
 );
 
+// ---------- Bleiglas ----------
+//
+// Die Figur ist eine Glasscheibe, keine Plastikmarke. Drei Dinge machen den
+// Unterschied, und alle drei stehen unten im Code:
+//
+//   Bleiruten. Die dunklen Stege, die die Scheiben halten. Sie sind das
+//   Erste, was man an einem Kirchenfenster erkennt – ohne sie ist es nur
+//   eine bunte Fläche. Sie laufen dort, wo die Figur ohnehin Gelenke hat:
+//   unter dem Kopf, an den Schultern entlang, um die Hüfte, zwischen den
+//   Beinen. Deshalb sitzen die Felder unten auf denselben Ankerpunkten wie
+//   die Silhouette und nicht auf frei gewählten.
+//
+//   Durchlicht statt Auflicht. Vorher lag ein Radialverlauf auf der Figur,
+//   als schiene eine Lampe darauf. Glas leuchtet von hinten: in der Mitte
+//   einer Scheibe am hellsten, zum Blei hin dunkler. Bei dunklen
+//   Spielerfarben muss dieses Leuchten kräftiger sein, sonst bleibt
+//   Schwarz eine schwarze Fläche – die Stärke hängt deshalb an der
+//   Helligkeit der Farbe.
+//
+//   Ungleiche Scheiben. Kein Glaser schneidet neun Felder aus derselben
+//   Tafel. Kopf, Brust, Bauch, Arme und Beine bekommen leicht verschiedene
+//   Tönungen, dazu ein paar Schlieren – Kathedralglas ist nie gleichmäßig.
+//
+// Der Trennring aus meeple-colors.js bleibt, aber mit fester Rollenteilung:
+// die Bleirute ist immer dunkel, der Schein außen immer hell. Vorher hing
+// beides an der Füllfarbe. Auf jedem Untergrund trägt damit mindestens
+// einer der beiden – helles Blei gibt es nicht.
+//
+// Formen, Töne und Rutenverlauf stehen in render/glass.js, weil sie als
+// reine Rechnung prüfbar sein müssen: das Aufhellen und der Farbstich
+// dürfen den Abstand der Spielerfarben nicht auffressen, und das prüft
+// tests/palette.test.mjs an der gemalten Figur.
+const SCHEIBEN = SCHEIBEN_ROH.map((s) => ({ ...s, p: new Path2D(s.d) }));
+const CAME = new Path2D();
+for (const d of RUTEN) CAME.addPath(new Path2D(d));
+
+/** Schlieren im Glas. Feste Lagen – im Zeichenweg wird nicht gewürfelt. */
+const STREAKS = [
+  { d: 'M-12 40 L112 -18', w: 5.0, a: 0.055 },
+  { d: 'M-12 58 L112 0',   w: 1.8, a: 0.040 },
+  { d: 'M-12 86 L112 26',  w: 3.2, a: 0.050 },
+  { d: 'M-12 126 L112 64', w: 6.5, a: 0.038 },
+].map((s) => ({ ...s, p: new Path2D(s.d) }));
+
+const rgbOf = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+/** Wahrgenommene Helligkeit 0…1 – entscheidet, wie stark das Glas leuchtet. */
+const helligkeit = (hex) => {
+  const [r, g, b] = rgbOf(hex);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+};
+
+// Die fertige Figur je Farbe einmal zeichnen und aufheben. Sie hängt an
+// nichts als der Farbe: Größe macht der Aufruf, und die Verläufe wären
+// sonst bei zwanzig Gefolgsleuten auf dem Brett vierzig neue Objekte je
+// Bild. Gezeichnet wird in einem Kasten von -10 bis 110, damit der Schein
+// außen hineinpasst.
+const GLAS_KASTEN = 120, GLAS_RAND = 10, GLAS_PX = 288;
+const glasCache = new Map();
+
+function glasFigur(color) {
+  const hit = glasCache.get(color);
+  if (hit) return hit;
+
+  const c = document.createElement('canvas');
+  c.width = c.height = GLAS_PX;
+  const g = c.getContext('2d');
+  const m = GLAS_PX / GLAS_KASTEN;
+  g.setTransform(m, 0, 0, m, GLAS_RAND * m, GLAS_RAND * m);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+
+  const rings = meepleRings(color);
+  const schein = helligkeit(rings.inner) >= helligkeit(rings.outer) ? rings.inner : rings.outer;
+  const hell = helligkeit(color);
+
+  // Schein außen: das Licht, das am Blei vorbeigeht. Er ist immer heller
+  // als die Füllung und trägt die Silhouette dort, wo das dunkle Blei mit
+  // einem dunklen Untergrund verschmilzt.
+  g.lineWidth = 13;
+  g.strokeStyle = schein;
+  g.globalAlpha = 0.55;
+  g.stroke(MEEPLE_PATH);
+  g.globalAlpha = 1;
+
+  // Grundton: der Rumpf.
+  g.fillStyle = color;
+  g.fill(MEEPLE_PATH);
+
+  g.save();
+  g.clip(MEEPLE_PATH);
+
+  // Die einzelnen Scheiben. Drei Dinge unterscheiden sie: Helligkeit, weil
+  // das Licht von oben links kommt; ein kleiner Stich ins Warme oder Kalte,
+  // weil kein Glaser sechs Felder aus derselben Tafel schneidet; und ein
+  // eigener Lichtpunkt, weil jede Scheibe für sich durchleuchtet wird.
+  //
+  // Der Stich bleibt klein genug, dass die Spielerfarbe eine Farbe bleibt:
+  // die Palette ist auf größten Abstand über Deuteranopie und Protanopie
+  // gerechnet, und das darf ein Stilmittel nicht aufweichen.
+  //
+  // Wie stark das Durchlicht ist, hängt an der Helligkeit der Farbe. Dunkles
+  // Glas braucht mehr davon, sonst bleibt Schwarz eine schwarze Fläche –
+  // und Schwarz ist eine Spielerfarbe.
+  const staerke = 0.09 + (1 - hell) * 0.20;
+  for (const sch of SCHEIBEN) {
+    g.save();
+    g.clip(sch.p);
+    g.fillStyle = scheibenTon(color, sch);
+    g.fill(MEEPLE_PATH);
+    // Linear, nicht radial. Ein Radialverlauf macht aus jeder Scheibe eine
+    // Kugel – dann steht da eine Plastikfigur mit Bleirahmen. Eine Scheibe
+    // ist flach und wird schräg durchleuchtet: hell an der einen Ecke,
+    // dunkel an der gegenüberliegenden, dazwischen gleichmäßig.
+    const licht = g.createLinearGradient(sch.mx - sch.r, sch.my - sch.r,
+                                         sch.mx + sch.r, sch.my + sch.r);
+    licht.addColorStop(0, `rgba(255,251,235,${staerke.toFixed(3)})`);
+    licht.addColorStop(0.55, `rgba(255,247,222,${(staerke * 0.30).toFixed(3)})`);
+    licht.addColorStop(1, `rgba(28,20,10,${(staerke * 0.34).toFixed(3)})`);
+    g.fillStyle = licht;
+    g.fill(MEEPLE_PATH);
+    // Der Schatten, den die Bleirute auf ihr Glas wirft. Die Hälfte des
+    // Strichs fällt aus der Beschneidung heraus, übrig bleibt eine dünne
+    // dunkle Kante genau innen an der Rute – daran erkennt man, dass die
+    // Scheibe *in* etwas sitzt und nicht aufgemalt ist.
+    g.lineWidth = 3.4;
+    g.strokeStyle = 'rgba(24,17,8,0.22)';
+    g.stroke(sch.p);
+    g.restore();
+  }
+
+  // Schlieren – Kathedralglas ist nie gleichmäßig.
+  for (const s of STREAKS) {
+    g.lineWidth = s.w;
+    g.strokeStyle = `rgba(255,253,244,${s.a})`;
+    g.stroke(s.p);
+  }
+
+  // Bleiruten innen, im Schnitt zur Silhouette – sie dürfen nicht
+  // überstehen, sonst sehen sie aus wie angeklebte Striche.
+  g.lineWidth = 4.6;
+  g.strokeStyle = BLEI;
+  g.stroke(CAME);
+  // Die Lötnaht obenauf: ein Blei ist rund, kein flacher Strich.
+  g.lineWidth = 1.1;
+  g.strokeStyle = 'rgba(214,200,172,0.22)';
+  g.save();
+  g.translate(-0.7, -0.8);
+  g.stroke(CAME);
+  g.restore();
+  g.restore();
+
+  // Bleirute außen: die Randfassung. Mittig auf der Silhouette, damit sie
+  // wie überall sonst über die Glaskante greift. Schmal halten – der Arm
+  // ist nur zehn Einheiten dick, und eine Fassung von sechs frisst ihn auf.
+  g.lineWidth = 4.4;
+  g.strokeStyle = BLEI;
+  g.stroke(MEEPLE_PATH);
+
+  // Ein einzelner Lichtreflex, schmal und schräg – so, wie eine Glasfläche
+  // eine Fensterkante spiegelt. Vorher stand hier ein breiter Bogen auf dem
+  // Kopf; der machte aus der Kopfscheibe eine Plastikkugel.
+  g.save();
+  g.clip(MEEPLE_PATH);
+  g.strokeStyle = 'rgba(255,255,255,0.22)';
+  g.lineWidth = 1.7;
+  g.beginPath();
+  g.moveTo(41, 14);
+  g.lineTo(35.5, 26);
+  g.moveTo(25, 55);
+  g.lineTo(17, 64);
+  g.stroke();
+  g.restore();
+
+  glasCache.set(color, c);
+  return c;
+}
+
 export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true } = {}) {
   const s = size * (big ? 1.45 : 1);
-  ctx.save();
-  ctx.translate(x - s / 2, y - s / 2);
-  ctx.scale(s / 100, s / 100);
 
-  // Kontaktschatten: flache Ellipse direkt unter den Füßen, kein Vollkreis
+  // Kontaktschatten: flache Ellipse direkt unter den Füßen, kein Vollkreis.
+  // Er steht außerhalb der aufgehobenen Figur, weil nicht jeder Aufruf ihn
+  // will – die Auswahlmarken zeichnen ohne.
   if (shadow) {
+    ctx.save();
+    ctx.translate(x - s / 2, y - s / 2);
+    ctx.scale(s / 100, s / 100);
     ctx.beginPath();
     ctx.ellipse(52, 99, 30, 11, 0, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(59,46,34,0.30)';
     ctx.fill();
+    ctx.restore();
   }
 
-  const rings = meepleRings(color);
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-
-  // Halo außen: hebt die Silhouette vom Untergrund ab
-  ctx.lineWidth = big ? 11 : 9;
-  ctx.strokeStyle = rings.outer;
-  ctx.stroke(MEEPLE_PATH);
-
-  // Füllung: Radialverlauf, Licht oben-links
-  const g = ctx.createRadialGradient(34, 24, 4, 52, 62, 82);
-  g.addColorStop(0, shade(color, 0.15));
-  g.addColorStop(0.45, color);
-  g.addColorStop(1, shade(color, -0.2));
-  ctx.fillStyle = g;
-  ctx.fill(MEEPLE_PATH);
-
-  // Kontur: dünn, 12 % dunkler, nie schwarz. Beim großen Meeple 20 % dicker.
-  ctx.lineWidth = big ? 4.2 : 3.5;
-  ctx.strokeStyle = rings.inner;
-  ctx.stroke(MEEPLE_PATH);
-
-  // Rim-Light: heller Bogen oben-links entlang der Kontur
-  ctx.save();
-  ctx.clip(MEEPLE_PATH);
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.beginPath();
-  ctx.arc(50, 23, 16, Math.PI * 1.05, Math.PI * 1.62);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(50, 66, 40, Math.PI * 1.12, Math.PI * 1.38);
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.restore();
+  const bild = glasFigur(color);
+  const k = (GLAS_KASTEN / 100) * s;
+  ctx.drawImage(bild, x - s / 2 - (GLAS_RAND / 100) * s, y - s / 2 - (GLAS_RAND / 100) * s, k, k);
 }
 
 // ---------- Kartengrafik ----------

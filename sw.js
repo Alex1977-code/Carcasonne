@@ -16,7 +16,7 @@
 // Wartezeit ist gedeckelt: kommt binnen drei Sekunden nichts, gilt der
 // Cache. Bei schlechtem Empfang startet das Spiel dadurch genauso schnell
 // wie vorher.
-const CACHE = 'carcassonne-v17';
+const CACHE = 'carcassonne-v18';
 const FRIST = 3000;   // so lange wird höchstens auf das Netz gewartet
 const ASSETS = [
   './',
@@ -39,6 +39,7 @@ const ASSETS = [
   './js/ui/render/cache.js',
   './js/ui/render/contract.js',
   './js/ui/render/fields.js',
+  './js/ui/render/glass.js',
   './js/ui/render/landmarks.js',
   './js/ui/render/layers.js',
   './js/ui/render/meeple-colors.js',
