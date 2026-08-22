@@ -1595,13 +1595,21 @@ export class BoardView {
     const candle = candleAt(now, view.calm);
     this.candle = candle;
 
-    // Eichentisch: die Textur wandert mit der Kamera, damit das Brett
-    // wirklich auf dem Tisch zu liegen scheint und nicht darüber schwebt.
-    paintTable(
-      ctx, r.width, r.height,
-      -this.cam.x * this.cam.scale * 0.12,
-      -this.cam.y * this.cam.scale * 0.12,
-    );
+    // Eichentisch. Die Textur ist im Weltkoordinatensystem verankert und
+    // wandert deshalb genau mit den Karten – beim Schieben wie beim Zoomen.
+    //
+    // Hier stand vorher ein Faktor 0,12: der Tisch bewegte sich mit einem
+    // Achtel der Brettgeschwindigkeit. Gemeint war Parallaxe, aber die gibt
+    // es hier nicht zu holen – der Tisch liegt nicht hinter dem Brett,
+    // sondern unmittelbar darunter, in derselben Ebene. Wer eine Karte
+    // schiebt, sieht die Maserung stehenbleiben, und die Karten schwimmen
+    // über dem Tisch statt darauf zu liegen. Genau so gemeldet.
+    //
+    // Der Maßstab hängt an cam.scale, bezogen auf die Ausgangsgröße von
+    // 90 px je Kachel. Ohne das bliebe die Maserung beim Zoomen gleich groß,
+    // und dann rutscht sie doch wieder gegen die Karten.
+    const [tischX, tischY] = this.worldToScreen(0, 0);
+    paintTable(ctx, r.width, r.height, tischX, tischY, this.cam.scale / 90);
     // Wachsglanz auf dem blanken Holz – muss unter die Kacheln, sonst
     // glänzt auch die Pappe.
     paintSheen(ctx, r.width, r.height, candle);
