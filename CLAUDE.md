@@ -73,6 +73,9 @@ derselbe Ablauf mit anderen Werkzeugen:
 
     node tools/karten-pruefen.mjs grafik/*.png      # messen
     node tools/karten-einbauen.mjs grafik/*.png     # zuschneiden, 512 px, WebP
+    node tools/karten-fluchten.mjs --probe          # Versatz rechnen
+    node tools/karten-einbauen.mjs grafik/*.png     # versetzt neu zuschneiden
+    node tools/karten-fluchten.mjs                  # Karten ohne Original
     node tools/karten-pruefen.mjs grafik/karten/*.webp   # danach noch einmal
 
 Das Motiv kommt aus dem Dateinamen: `EC_CATH.png` ergibt EC_CATH,
@@ -94,6 +97,33 @@ Drei Dinge, die dabei aufgefallen sind und wiederkommen werden:
   Werkzeug „kein Weg an der Kante". Widerspricht eine einzelne Kante dem
   Bild, ist es meistens das. Die Schwelle steht in `karten-pruefen.mjs`
   bei einer Sättigung von 0,45.
+
+## Fluchten: die halbe Handbreit, die man sieht
+
+Der Randvertrag verlangt 50 %, geliefert wird 49 bis 53,6 %. Jede einzelne
+Karte besteht die Prüfung, und trotzdem springt die Straße an jeder Naht –
+gemessen bis zu 4,6 % der Kantenlänge, auf einem Telefon rund zehn Punkte.
+Das fällt beim Spielen sofort auf und in der Einzelansicht überhaupt nicht.
+
+Neu malen muss man dafür nichts. Sitzt ein Weg an der Nordkante bei 51,5 %,
+ist die ganze Karte um 1,5 % zu weit rechts, und ein Versatz bringt ihn in
+die Mitte. `tools/karten-fluchten.mjs` rechnet das aus; angewendet wird es
+beim Zuschneiden, damit am Rand kein Streifen frei wird.
+
+Drei Dinge, über die ich dabei gestolpert bin:
+
+* **Der Versatz muss sich aufsummieren.** `grafik/versatz.json` hält den
+  Gesamtwert, nicht den Rest der letzten Messung – `karten-einbauen.mjs`
+  schneidet immer aus dem unversehrten Original.
+* **Erst den Mittelpunkt, dann die Größe.** Nimmt man das größte Quadrat und
+  verschiebt es danach, liegt es schon am Rand an und kann sich nicht mehr
+  bewegen.
+* **Eckabzug je Ecke.** Der größte Wert für alle vier Seiten frisst bei einer
+  einzigen grauen Ecke die Stadt am gegenüberliegenden Rand weg.
+
+Flüsse werden gemessen, aber nicht verschoben: ihre breiten steinernen Ufer
+lassen die Messung um mehr als einen Punkt springen, und ein Versatz daraus
+macht die Karte schlechter statt besser.
 
 ## Neue Bögen einbauen
 

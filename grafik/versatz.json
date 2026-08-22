@@ -1,0 +1,88 @@
+{
+  "_": [
+    "Wie weit eine Karte verschoben werden muss, damit ihre Wege genau",
+    "mittig austreten – in Prozent der Kantenlänge, positiv nach rechts",
+    "beziehungsweise nach unten. Gerechnet von tools/karten-fluchten.mjs,",
+    "angewendet von tools/karten-einbauen.mjs beim Zuschneiden."
+  ],
+  "EC_CITY_DIAG": {
+    "dx": 0,
+    "dy": -0.75,
+    "quelle": "grafik/EC_CITY_DIAG.png"
+  },
+  "EC_CITY_GATE": {
+    "dx": 1.125,
+    "dy": 0,
+    "quelle": "grafik/EC_CITY_GATE.png"
+  },
+  "EC_CITY_ROADPASS": {
+    "dx": 0,
+    "dy": -1.125,
+    "quelle": "grafik/EC_CITY_ROADPASS.png"
+  },
+  "EC_CROSS_CITY": {
+    "dx": 0.125,
+    "dy": -8.876,
+    "quelle": "grafik/EC_CROSS_CITY.png"
+  },
+  "EC_DOUBLE_CURVE": {
+    "dx": 0.563,
+    "dy": -0.874,
+    "quelle": "grafik/EC_DOUBLE_CURVE.png"
+  },
+  "EC_DOUBLE_CURVE2": {
+    "dx": -0.5,
+    "dy": -0.625,
+    "quelle": "grafik/EC_DOUBLE_CURVE2.png"
+  },
+  "EC_INN_CITYSTRAIGHT": {
+    "dx": 0,
+    "dy": -0.875,
+    "quelle": "grafik/EC_INN_CITYSTRAIGHT.png"
+  },
+  "EC_INN_CURVE": {
+    "dx": 0.125,
+    "dy": 0,
+    "quelle": "grafik/EC_INN_CURVE.png"
+  },
+  "EC_INN_TJUNC": {
+    "dx": 0,
+    "dy": -0.5,
+    "quelle": "grafik/EC_INN_TJUNC.png"
+  },
+  "EC_MON_ROAD2": {
+    "dx": -0.935,
+    "dy": 0,
+    "quelle": "grafik/EC_MON_ROAD2.png"
+  },
+  "RV_BRIDGE": {
+    "dx": 0,
+    "dy": -0.5,
+    "quelle": "grafik/RV_BRIDGE.png"
+  },
+  "RV_ROADCURVE": {
+    "dx": -0.125,
+    "dy": 0.125,
+    "quelle": "grafik/RV_ROADCURVE.png"
+  },
+  "U": {
+    "dx": -0.375,
+    "dy": 0,
+    "quelle": "grafik/U_strasse-gerade.png"
+  },
+  "V": {
+    "dx": 1,
+    "dy": -4.5,
+    "quelle": "grafik/V_strassenkurve.png"
+  },
+  "W": {
+    "dx": -0.5,
+    "dy": -2.748,
+    "quelle": "grafik/W_kreuzung.png"
+  },
+  "X": {
+    "dx": -0.125,
+    "dy": 0.25,
+    "quelle": "grafik/X_vierweg.png"
+  }
+}
