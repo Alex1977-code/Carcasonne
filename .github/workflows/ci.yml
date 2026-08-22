@@ -19,6 +19,8 @@ jobs:
           node-version: 22
       - name: Engine-Tests
         run: node tests/engine.test.mjs
+      - name: Regelprüfung (offizieller Regelsatz)
+        run: node tests/regeln.test.mjs
       - name: Kachelschema (Renderer-Adapter)
         run: node tests/tiles-schema.test.mjs
       - name: Farbprüfung (Spielerfarben, Trennring)

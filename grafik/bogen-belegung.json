@@ -15,33 +15,162 @@
     "Darstellung zurück."
   ],
   "bogen01_generiert.png": [
-    { "id": "A", "dreh": 0 },
-    { "id": "B", "dreh": 0 },
-    { "id": "C", "dreh": 0 },
-    { "id": "D", "dreh": 0 }
+    {
+      "id": "A",
+      "dreh": 0
+    },
+    {
+      "id": "B",
+      "dreh": 0
+    },
+    {
+      "id": "C",
+      "dreh": 0
+    },
+    {
+      "id": "D",
+      "dreh": 0
+    }
   ],
   "bogen02_generiert.png": [
-    { "id": "E", "dreh": 0 },
-    { "id": "F", "dreh": 0 },
-    { "id": "H", "dreh": 0 },
-    { "id": "G", "dreh": 0 }
+    {
+      "id": "E",
+      "dreh": 0
+    },
+    {
+      "id": "F",
+      "dreh": 0
+    },
+    {
+      "id": "H",
+      "dreh": 0
+    },
+    {
+      "id": "G",
+      "dreh": 0
+    }
   ],
   "bogen03_generiert.png": [
-    { "id": "I", "dreh": 1 },
-    { "id": "J", "dreh": 0 },
-    { "id": "K", "dreh": 0 },
-    { "id": "L", "dreh": 0 }
+    {
+      "id": "I",
+      "dreh": 1
+    },
+    {
+      "id": "J",
+      "dreh": 0
+    },
+    {
+      "id": "K",
+      "dreh": 0
+    },
+    {
+      "id": "L",
+      "dreh": 0
+    }
   ],
   "bogen04_generiert.png": [
-    { "id": "M", "dreh": 0 },
-    { "id": "N", "dreh": 0 },
-    { "id": "O", "dreh": 0 },
-    { "id": "P", "dreh": 0 }
+    {
+      "id": "M",
+      "dreh": 0
+    },
+    {
+      "id": "N",
+      "dreh": 0
+    },
+    {
+      "id": "O",
+      "dreh": 0
+    },
+    {
+      "id": "P",
+      "dreh": 0
+    }
   ],
   "bogen05_generiert.png": [
-    { "id": "Q", "dreh": 0 },
-    { "id": "R", "dreh": 0 },
-    { "id": "S", "dreh": 0 },
-    { "id": "T", "dreh": 0 }
+    {
+      "id": "Q",
+      "dreh": 0
+    },
+    {
+      "id": "R",
+      "dreh": 0
+    },
+    {
+      "id": "S",
+      "dreh": 0
+    },
+    {
+      "id": "T",
+      "dreh": 0
+    }
+  ],
+  "bogen07_generiert.png": [
+    {
+      "id": "U",
+      "dreh": 0
+    },
+    null,
+    {
+      "id": "W",
+      "dreh": 0
+    },
+    {
+      "id": "X",
+      "dreh": 0
+    }
+  ],
+  "bogen08_generiert.png": [
+    {
+      "id": "RV_SPRING",
+      "dreh": 0
+    },
+    {
+      "id": "RV_LAKE",
+      "dreh": 0
+    },
+    {
+      "id": "RV_STRAIGHT",
+      "dreh": 0
+    },
+    {
+      "id": "RV_CURVE",
+      "dreh": 0
+    }
+  ],
+  "bogen10_generiert.png": [
+    {
+      "id": "RV_CITY2",
+      "dreh": 0
+    },
+    {
+      "id": "EC_CATH",
+      "dreh": 0
+    },
+    {
+      "id": "EC_INN_STRAIGHT",
+      "dreh": 0
+    },
+    null
+  ],
+  "bogen12_generiert.png": [
+    null,
+    null,
+    {
+      "id": "EC_CITY_FULL",
+      "dreh": 0
+    },
+    null
+  ],
+  "bogen13_generiert.png": [
+    null,
+    null,
+    {
+      "id": "EC_MON_ROAD2",
+      "dreh": 0
+    },
+    {
+      "id": "EC_CITY_GATE",
+      "dreh": 0
+    }
   ]
 }

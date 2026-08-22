@@ -1,348 +1,605 @@
-# Prompts für die fehlenden Kartenbögen
+# Kartenbögen 19 bis 26 — alles ab Bogen 07 neu
 
-Stand: 20 von 49 Motiven sind gemalt (Bögen 01–05). Es fehlen **29 Motive**.
-Diese Datei enthält für jedes fehlende Motiv einen fertigen Prompt.
+**29 der 49 Motive werden neu gemalt.** Die 20 Motive der Bögen 01 bis 05
+bleiben, wie sie sind — sie sind gemessen in Ordnung und geben den Stil vor.
+Alles, was danach kam, wird ersetzt.
 
-Die Bögen 03 und 06 sind byte-identisch — Bogen 06 ist eine Dublette und
-kann gelöscht werden.
+## Warum überhaupt neu
 
----
+Gemessen über alle bisher gemalten Karten, gruppiert nach Herkunftsbogen:
 
-## Das Wichtigste zuerst: der Randvertrag
+| Bogen | Wegbreite an der Kante | Rankendichte der Wiese | Wiesengrün (R,G,B) |
+|---|---|---|---|
+| 01–05 | 9,5–11,5 % | 38–76 % | 33–46 / 66–86 / 16–33 |
+| 07 | **11,8–13,8 %** | **6,9–13,0 %** | 33 / 88–90 / 16–17 |
+| 08, 10, 13 | 7,5–9,8 % | 7–28 % | 28–40 / 68–78 / 13–21 |
 
-Das ist der Teil, der über Erfolg oder Misserfolg entscheidet. Karten
-werden in beliebiger Kombination aneinandergelegt. Wenn eine Straße auf
-Karte A bei 48 % der Kantenlänge austritt und auf Karte B bei 53 %
-eintritt, hat das Spielfeld an jeder Naht einen sichtbaren Versatz.
+Die Bögen ab 07 wurden allein aus Text erzeugt, ohne Vorlagenbild. Daran sind
+sie gescheitert: aus dem Wort „mittig" macht ein Bildmodell 36 % oder 58 %, und
+aus „schmales Band" 13,8 % statt 11 %. Von den 40 Kantenübergängen der ersten
+Lieferung lagen 24 daneben. Zusätzlich unterscheidet sich die Wiese so stark,
+dass man auf dem Brett sofort sieht, welche Karte von welchem Bogen stammt.
 
-Aus den vorhandenen Bögen gemessen — **jeder neue Bogen muss sich daran
-halten**:
+Zwei Fehler stecken noch heute in den übernommenen Karten:
+
+* **RV_CURVE** tritt an der Unterkante bei 46,5 % statt 50 % aus.
+* **U, W und X** haben Wege von 11,8 bis 13,8 % statt 11 %.
+
+Beide sind nie aufgefallen, weil das Prüfwerkzeug nur zu *schmale* Wege
+beanstandet hat. Das ist behoben.
+
+## Wie es diesmal läuft: zwei Bilder, nicht nur Text
+
+Die funktionierenden Bögen 01 bis 05 sind mit **zwei angehängten Bildern**
+entstanden. Genauso wird es hier gemacht:
+
+* **Bild 1 — der Vorlagenbogen.** Gibt Inhalt und Geometrie vor. Für jeden
+  Bogen liegt eine eigene Datei bei: `bogen19-vorlage.png` bis
+  `bogen26-vorlage.png`. Sie sind vom Spiel selbst gezeichnet und halten den
+  Randvertrag nicht nur ein — sie *sind* er. **Referenzstärke hoch.**
+* **Bild 2 — die Referenzplatte,** `referenzplatte.png`. Gibt ausschließlich
+  das Material vor: Farbe, Oberfläche, Rankendichte, Wegmaterial.
+  **Referenzstärke niedrig.** Für alle acht Bögen dasselbe Bild — das ist der
+  Grund, warum am Ende alles aus einem Guss aussieht.
+
+Die Referenzplatte ist Motiv A aus Bogen 01, eine Klosterkarte. Ihre
+Klostermauer läuft als Rahmen um die Karte herum. **Dieser Rahmen darf sich
+nicht weiterverbreiten** — er macht aus dem zusammengelegten Spielfeld ein
+Kachelgitter. Der Hinweis steht in jedem Prompt mit drin.
+
+## Der Randvertrag
+
+Karten werden in beliebiger Kombination aneinandergelegt. Tritt eine Straße auf
+Karte A bei 48 % der Kantenlänge aus und auf Karte B bei 53 % ein, hat das
+Spielfeld an jeder Naht einen Versatz.
 
 | Element | Lage an der Kante | Breite |
 |---|---|---|
-| **Straße** | exakt mittig, Mitte bei 50 % | **11 %** der Kantenlänge (45 %–56 %) |
-| **Fluss** | exakt mittig, Mitte bei 50 % | **18 %** der Kantenlänge (41 %–59 %) |
-| **Stadt** | füllt die Kante **vollständig**, 0 %–100 % | ganze Kante |
+| **Straße** | mittig bei 50 % | **10,5–11 %** Elfenbeinkern, **15–16 %** mit Goldfassung |
+| **Fluss** | mittig bei 50 % | **18–19 %** |
+| **Stadt** | füllt die Kante ganz | **0–100 %** |
 | **Wiese** | alles Übrige | — |
 
-Zwei Ausnahmen in den bestehenden Bögen, die **nicht** übernommen werden
-sollen: auf Bogen 02 endet die Stadt 7–8 % vor der Ecke, auf Bogen 05
-belegt sie nur 0–90 %. Beides erzeugt an der Naht einen Keil aus Wiese,
-der gegen eine Stadtmauer läuft. Neue Karten bitte durchgehend 0–100 %.
+Die Maße stehen in jedem Prompt noch einmal mit drin.
 
-Dazu drei Regeln, die genauso wichtig sind:
+## Prüfen, bevor übernommen wird
 
-1. **Kein Rahmen um die Karte.** Die Malerei läuft bis an alle vier
-   Kanten. Ein umlaufender Zierrahmen (wie bei den Klöstern auf Bogen 01)
-   macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
-2. **Keine abgerundeten Ecken, kein Schlagschatten, kein grauer Grund um
-   die Karte.** Die Karte ist ein randvoll bemaltes Quadrat.
-3. **Nichts Wichtiges in den äußeren 3 %.** Dort wird beim Zuschneiden
-   geschnitten.
+    node tools/bogen-pruefen.mjs <bild.png> <Motiv1> <Motiv2> <Motiv3> <Motiv4>
 
----
+Das Werkzeug meldet je Karte die tatsächliche Kantenfolge, ob sie zum genannten
+Motiv passt, und für jeden Weg und Fluss Lage und Breite an der Kante — in
+beide Richtungen, zu schmal wie zu breit. Erst wenn dort „Alles im Randvertrag"
+steht, wird übernommen.
 
-## Der Stil (in jeden Prompt übernehmen)
+**Nie nach Augenschein entscheiden.** Ein Weg, der bei 44 % statt 50 %
+austritt, sieht in der Vorschau tadellos aus. Von den 40 Übergängen der ersten
+Lieferung lagen 24 daneben, und im Bild war keiner davon aufgefallen.
 
-> Illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel,
-> Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn.
-> Wiesen als tiefgrünes Email mit eingelegten goldenen Ranken, winzigen
-> weiß-rot-blauen Blüten und Bäumen als goldumrissene Kreise mit
-> Goldperlen. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern
-> und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen
-> Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit
-> schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche.
-> Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf.
-> Kräftige, gesättigte Emailfarben: Blattgold, Smaragdgrün, Lapisblau,
-> Elfenbein, Zinnoberrot.
+## Übersicht
 
-Wappen, wo verlangt: **blauer Rundschild mit goldenem Sparren und zwei
-goldenen Kugeln darunter**, wie auf den Bögen 01–05.
+| Bogen | Vorlage | Motive |
+|---|---|---|
+| **19** | `bogen19-vorlage.png` | U · V · W · X |
+| **20** | `bogen20-vorlage.png` | RV_SPRING · RV_LAKE · RV_STRAIGHT · RV_CURVE |
+| **21** | `bogen21-vorlage.png` | RV_BRIDGE · RV_ROADCURVE · RV_CITY · RV_CITY2 |
+| **22** | `bogen22-vorlage.png` | EC_CATH · EC_CITY_FULL · EC_TRIPLE_CITY · EC_CITY_3SHIELD |
+| **23** | `bogen23-vorlage.png` | EC_INN_STRAIGHT · EC_INN_CURVE · EC_INN_TJUNC · EC_DOUBLE_CURVE |
+| **24** | `bogen24-vorlage.png` | EC_DOUBLE_CURVE2 · EC_INN_CITYCURVE · EC_INN_CITYSTRAIGHT · EC_CITY_GATE |
+| **25** | `bogen25-vorlage.png` | EC_CITY_DIAG · EC_CITY_ROADPASS · EC_CROSS_CITY |
+| **26** | `bogen26-vorlage.png` | RV_MON · EC_MON_ROAD2 |
+
+Reihenfolge: Bogen 19 zuerst — er betrifft das Grundspiel, das ohne
+Erweiterung gespielt wird. Danach 20 und 21 für den Fluss, dann 22 bis 26 für
+Wirtshäuser und Kathedralen.
 
 ---
 
-## Bogenformat
+# Bogen 19 — Straßenkarten des Grundspiels
 
-Wie bisher: **ein Bild, 2×2 Karten**, jede Karte ein randvoll bemaltes
-Quadrat, zwischen den Karten ein schmaler neutralgrauer Steg. Kantenlänge
-mindestens 1254 px pro Bogen (besser 2048 px — das Werkzeug rechnet auf
-512 px pro Karte herunter, mehr Ausgangsmaterial gibt eine sauberere
-Skalierung).
+**Motive:** U · V · W · X
 
-Reihenfolge im Bogen: **0 oben links, 1 oben rechts, 2 unten links,
-3 unten rechts.** Genau diese Reihenfolge in `grafik/bogen-belegung.json`
-eintragen.
+Die letzten vier Grundkarten. Zusammen 22 der 72 Karten des Grundspiels — kein Bogen wirkt stärker.
 
----
+### Referenzbilder
 
-# Bogen 07 — Straßenkarten
+* **Bild 1:** `bogen19-vorlage.png` — Inhalt und Geometrie. Referenzstärke **hoch**.
+* **Bild 2:** `referenzplatte.png` — nur Material. Referenzstärke **niedrig**.
 
-**Das ist der dringendste Bogen.** Diese vier Motive sind zusammen
-**22 der 72 Grundkarten** (31 %). Solange sie fehlen, liegen auf jedem
-Spielfeld gezeichnete Karten in hellem Grün zwischen den gemalten in Gold
-— der Bruch ist auf jedem Bildschirmfoto sofort zu sehen.
+Auf diesem Bogen kommt **keine einzige Stadt** vor. Malt der Generator trotzdem Städte, ist Image 2 zu stark eingestellt.
 
-### 07/0 — Motiv U: gerade Straße (8 Karten)
-> Ein elfenbeinfarbenes, quer geripptes Wegband läuft senkrecht mittig von
-> der Oberkante zur Unterkante durch die ganze Karte, 11 % der Kartenbreite,
-> mit schmaler Goldfassung. Links und rechts davon tiefgrüne Emailwiese mit
-> goldenen Ranken, Blüten und zwei bis drei goldumrissenen Bäumen; auf einer
-> Seite ein goldener Acker mit geritzter Furche.
+### Prompt — vollständig, zum Einfügen
 
-### 07/1 — Motiv V: Straßenkurve (9 Karten)
-> Ein elfenbeinfarbenes, quer geripptes Wegband tritt mittig an der
-> Unterkante ein und schwingt in einem weichen Viertelkreis nach links zur
-> Mitte der linken Kante, 11 % der Kartenbreite, mit schmaler Goldfassung.
-> Die übrige Fläche ist tiefgrüne Emailwiese mit goldenen Ranken, Blüten,
-> drei goldumrissenen Bäumen und zwei goldenen Äckern in der oberen rechten
-> Hälfte.
+```
+Image 1 ist die Vorlage. Sie definiert Inhalt und Geometrie: welche Karte an welcher Position liegt, wo jeder Weg, jeder Fluss und jede Stadt an welcher Kante austritt, wie breit sie sind und wie sie innerhalb der Karte verlaufen. Halte dich exakt daran, Punkt für Punkt. Erfinde keine eigenen Radien und keine eigenen Breiten.
 
-### 07/2 — Motiv W: Wegkreuz mit drei Armen (4 Karten)
-> Drei elfenbeinfarbene, quer gerippte Wegbänder treffen sich in der
-> Kartenmitte: eines von der Mitte der rechten Kante, eines von der Mitte
-> der Unterkante, eines von der Mitte der linken Kante, je 11 % der
-> Kartenbreite mit Goldfassung. Am Treffpunkt eine runde Goldscheibe mit
-> blauem Emailauge als Wegmal. Die obere Kartenhälfte ist durchgehend
-> tiefgrüne Emailwiese mit Ranken, Blüten und Bäumen.
+Image 2 ist AUSSCHLIESSLICH eine Materialprobe. Übernimm daraus die Farbigkeit, die Oberfläche, die Dichte des Rankenwerks und das Aussehen der Bänder und Bauten. Übernimm daraus NICHTS an Aufbau. Insbesondere hat Image 2 eine Klostermauer, die als Rahmen um die Karte herumläuft — so etwas darf auf keiner der hier beschriebenen Karten vorkommen, es macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
 
-### 07/3 — Motiv X: Kreuzung (1 Karte)
-> Vier elfenbeinfarbene, quer gerippte Wegbänder laufen von der Mitte
-> jeder der vier Kanten zur Kartenmitte, je 11 % der Kartenbreite mit
-> Goldfassung. Am Kreuzungspunkt eine runde Goldscheibe mit blauem
-> Emailauge. In den vier entstehenden grünen Vierteln je ein
-> goldumrissener Baum oder ein goldener Acker auf tiefgrüner Emailwiese.
+Ein einzelnes quadratisches Bild mit vier verschiedenen Spielkarten in einem 2×2-Raster, dazwischen ein schmaler neutralgrauer Steg. Jede Karte ist ein randvoll bemaltes Quadrat: kein Zierrahmen, keine abgerundeten Ecken, kein Schlagschatten, die Malerei läuft bis an alle vier Kanten.
 
----
+Stil: illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel, Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn. Wiesen als tiefgrünes Email mit dicht eingelegten goldenen Ranken, winzigen weiß-rot-blauen Blüten und Bäumen als goldumrissene Bögen mit Goldperlen und dunkelrotem Stamm. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit schmaler Goldfassung. Flüsse als lapisblaue Emailbänder mit silberweißen Wellenlinien und schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche. Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf. Blattgold, Smaragdgrün, Lapisblau, Elfenbein, Zinnoberrot.
 
-# Bogen 08–10 — Der Fluss (9 Motive)
+Maße, die genau eingehalten werden müssen — sie sind aus den vorhandenen Bögen gemessen, nicht geschätzt:
+– Jeder Weg tritt mittig an seiner Kante aus, Mitte bei 50 % der Kantenlänge, Abweichung höchstens 1 %.
+– Der elfenbeinfarbene Kern eines Weges ist 10,5 bis 11 % der Kantenlänge breit, mit der Goldfassung zusammen 15 bis 16 %.
+– Jeder Fluss tritt mittig an seiner Kante aus, Mitte bei 50 %, und ist 18 bis 19 % der Kantenlänge breit.
+– Eine Stadt füllt ihre Kante über die volle Länge, von Ecke zu Ecke.
+– Diese Werte gelten an jeder Kante jeder Karte gleich. Ein Weg, der bei 44 % statt 50 % austritt oder 13 % statt 11 % breit ist, macht die Karte unbrauchbar: sie passt dann an keine andere.
+– Die Wiese ist gleichmäßig dicht mit Ranken belegt, so dicht wie in Image 2. Keine leeren Grünflächen.
+– Auf jeder Karte, die Wiese hat, stehen zwei bis vier Bäume und ein bis zwei goldene Äcker, über die Wiesenfläche verteilt, nicht an den Kanten geballt.
 
-Der Fluss ist **lapisblaues Email mit hellblauen Glanzlinien und
-goldener Uferfassung**, 18 % der Kantenlänge breit, mittig an der Kante.
-Er läuft immer unter Wegen und Städten hindurch bzw. wird überbrückt.
+Die vier Karten:
 
-### 08/0 — RV_SPRING: Quelle
-> Nur an der **Unterkante** tritt mittig ein lapisblauer Fluss aus, 18 %
-> der Kartenbreite, mit goldener Uferfassung. Er entspringt in der
-> Kartenmitte einem gemauerten Rundbrunnen aus Gold mit blauem Emailwasser.
-> Ringsum tiefgrüne Emailwiese mit Ranken, Blüten und Bäumen. Die anderen
-> drei Kanten sind reine Wiese.
+Oben links: Ein elfenbeinfarbenes, quer geripptes Wegband läuft senkrecht mittig von der Oberkante zur Unterkante durch die ganze Karte, mit schmaler Goldfassung. Links und rechts tiefgrüne Emailwiese mit dichten goldenen Ranken, Blüten, je zwei goldumrissenen Bäumen und je einem goldenen Acker mit geritzter Furche.
 
-### 08/1 — RV_LAKE: Mündung im See
-> Nur an der **Oberkante** tritt mittig ein lapisblauer Fluss ein, 18 %
-> der Kartenbreite, mit goldener Uferfassung, und weitet sich zur
-> Kartenmitte hin zu einem ovalen See aus lapisblauem Email mit hellblauen
-> Glanzlinien und goldenem Ufersaum. Ringsum tiefgrüne Emailwiese mit
-> Schilf, Blüten und Bäumen. Die anderen drei Kanten sind reine Wiese.
+Oben rechts: Ein elfenbeinfarbenes, quer geripptes Wegband tritt mittig an der Unterkante ein und schwingt in einem gleichmäßigen Viertelkreis nach links zur Mitte der linken Kante, mit schmaler Goldfassung. Der Bogen ist rund, kein enger Knick und keine flache Ausbuchtung. Die übrige Fläche ist Wiese mit dichten Ranken, Blüten, drei Bäumen und zwei goldenen Äckern in der oberen rechten Hälfte.
 
-### 08/2 — RV_STRAIGHT: gerader Fluss (2 Karten)
-> Ein lapisblauer Fluss läuft senkrecht mittig von der Oberkante zur
-> Unterkante durch die ganze Karte, 18 % der Kartenbreite, mit goldener
-> Uferfassung und hellblauen Glanzlinien. Links und rechts tiefgrüne
-> Emailwiese mit Ranken, Blüten und Bäumen.
+Unten links: Drei elfenbeinfarbene, quer gerippte Wegbänder treffen sich in der Kartenmitte: eines von der Mitte der rechten Kante, eines von der Mitte der Unterkante, eines von der Mitte der linken Kante, alle drei gleich breit mit Goldfassung. Am Treffpunkt eine runde Goldscheibe mit strahlenförmiger Rippung und blauem Emailauge als Wegmal. Die obere Kartenhälfte ist durchgehend Wiese mit zwei Bäumen und einem Acker; an der Oberkante tritt kein Weg aus.
 
-### 08/3 — RV_CURVE: Flusskurve (3 Karten)
-> Ein lapisblauer Fluss tritt mittig an der Unterkante ein und schwingt in
-> einem weichen Viertelkreis nach links zur Mitte der linken Kante, 18 %
-> der Kartenbreite, mit goldener Uferfassung. Die übrige Fläche ist
-> tiefgrüne Emailwiese mit Ranken, Blüten und Bäumen.
+Unten rechts: Vier elfenbeinfarbene, quer gerippte Wegbänder laufen von der Mitte jeder der vier Kanten zur Kartenmitte, alle vier gleich breit mit Goldfassung. Am Kreuzungspunkt eine runde Goldscheibe mit strahlenförmiger Rippung und blauem Emailauge. In den vier entstehenden grünen Vierteln je ein goldumrissener Baum oder ein goldener Acker.
+```
 
-### 09/0 — RV_BRIDGE: Brücke
-> Ein lapisblauer Fluss läuft senkrecht mittig von oben nach unten durch
-> die Karte (18 % breit, goldene Uferfassung). Waagerecht mittig kreuzt
-> ihn ein elfenbeinfarbenes, quer geripptes Wegband von der linken zur
-> rechten Kante (11 % breit, Goldfassung). Über dem Fluss trägt eine
-> goldene Rundbogenbrücke mit Emailgeländer den Weg. Übrige Fläche
-> tiefgrüne Emailwiese.
+### Prüfen
 
-### 09/1 — RV_CITY: Fluss mit Stadt rechts
-> Ein lapisblauer Fluss läuft senkrecht mittig von oben nach unten durch
-> die Karte (18 % breit, goldene Uferfassung). Die **rechte Kante** ist
-> über ihre **volle Länge** Stadt: Goldgrund mit weißen Häusern, blauen
-> Ziegeldächern und einer Stadtmauer aus Goldband mit Zinnenmarken, die
-> als Bogen zum Fluss hin abschließt. Zwischen Fluss und Stadtmauer
-> schmaler grüner Uferstreifen. Links vom Fluss tiefgrüne Emailwiese.
+```
+node tools/bogen-pruefen.mjs bogen19_generiert.png U V W X
+```
 
-### 09/2 — RV_MON: Flusskurve mit Kloster
-> Ein lapisblauer Fluss tritt mittig an der Unterkante ein und schwingt in
-> einem Viertelkreis nach links zur Mitte der linken Kante (18 % breit,
-> goldene Uferfassung). In der oberen rechten Hälfte steht ein Kloster:
-> weiße Kirche mit blauem Satteldach, goldenem Glockenturm und ummauertem
-> Hof mit Kräutergarten. Übrige Fläche tiefgrüne Emailwiese.
-> **Kein Rahmen um die Karte** — die Klostermauer bleibt im Inneren.
+### Danach in `grafik/bogen-belegung.json`
 
-### 09/3 — RV_ROADCURVE: Fluss- und Wegkurve
-> Ein lapisblauer Fluss tritt mittig an der Unterkante ein und schwingt in
-> einem Viertelkreis nach links zur Mitte der linken Kante (18 % breit).
-> Ein elfenbeinfarbenes, quer geripptes Wegband tritt mittig an der
-> Oberkante ein und schwingt in einem Viertelkreis nach rechts zur Mitte
-> der rechten Kante (11 % breit, Goldfassung). Fluss und Weg berühren
-> einander nicht. Übrige Fläche tiefgrüne Emailwiese mit Bäumen.
-
-### 10/0 — RV_CITY2: Fluss mit Stadt links
-> Wie 09/1, aber die Stadt liegt an der **linken Kante** und füllt sie
-> über ihre volle Länge; rechts vom Fluss tiefgrüne Emailwiese.
+```json
+"bogen19_generiert.png": [
+  { "id": "U", "dreh": 0 },
+  { "id": "V", "dreh": 0 },
+  { "id": "W", "dreh": 0 },
+  { "id": "X", "dreh": 0 }
+]
+```
 
 ---
 
-# Bogen 11–14 — Wirtshäuser & Kathedralen (16 Motive)
+# Bogen 20 — Der Fluss — Grundformen
 
-Das **Wirtshaus am See** ist ein weißes Haus mit blauem Dach, rotem
-Wirtshausschild an goldenem Ausleger und einem kleinen blauen Teich
-daneben; es steht immer direkt am Weg.
-Die **Kathedrale** ist eine dreischiffige weiße Kirche mit drei blauen
-Türmen, goldener Fensterrose und rotem Portal.
+**Motive:** RV_SPRING · RV_LAKE · RV_STRAIGHT · RV_CURVE
 
-### 11/0 — EC_CATH: Kathedralstadt (2 Karten)
-> Die ganze Karte ist Stadt: Goldgrund bis an alle vier Kanten, keine
-> Wiese. In der Mitte eine große dreischiffige Kathedrale, weiß mit drei
-> blauen Turmdächern, goldener Fensterrose und rotem Portal. Ringsum
-> dicht gedrängte weiße Häuser mit blauen Ziegeldächern.
+Die vier Karten, mit denen jede Flusspartie anfängt und aufhört.
 
-### 11/1 — EC_INN_STRAIGHT: gerade Straße mit Wirtshaus
-> Wie Motiv U (senkrechtes Wegband mittig, 11 % breit), zusätzlich rechts
-> am Weg ein Wirtshaus: weißes Haus mit blauem Dach, rotem Wirtshausschild
-> an goldenem Ausleger, daneben ein kleiner ovaler blauer Teich mit
-> goldenem Ufersaum. Übrige Fläche tiefgrüne Emailwiese.
+### Referenzbilder
 
-### 11/2 — EC_INN_CURVE: Straßenkurve mit Wirtshaus (2 Karten)
-> Wie Motiv V (Wegkurve von der Unterkante zur linken Kante, 11 % breit),
-> zusätzlich in der Innenseite der Kurve ein Wirtshaus mit rotem
-> Wirtshausschild und kleinem blauem Teich. Übrige Fläche tiefgrüne
-> Emailwiese mit Bäumen.
+* **Bild 1:** `bogen20-vorlage.png` — Inhalt und Geometrie. Referenzstärke **hoch**.
+* **Bild 2:** `referenzplatte.png` — nur Material. Referenzstärke **niedrig**.
 
-### 11/3 — EC_INN_TJUNC: Wegkreuz mit Wirtshaus
-> Wie Motiv W (drei Wegarme zur Mitte, runde Goldscheibe am Treffpunkt),
-> zusätzlich am unteren Wegarm ein Wirtshaus mit rotem Wirtshausschild und
-> kleinem blauem Teich. Obere Kartenhälfte tiefgrüne Emailwiese.
+Auf diesem Bogen kommt **keine Straße und keine Stadt** vor, nur Fluss und Wiese. Image 2 hat keinen Fluss — sein Aussehen steht vollständig in der Stilbeschreibung.
 
-### 12/0 — EC_INN_CITYCURVE: Stadt oben, Wegkurve mit Wirtshaus
-> Die **Oberkante** ist über ihre volle Länge Stadt: Goldgrund mit weißen
-> Häusern und blauen Dächern, nach unten durch eine Stadtmauer aus
-> Goldband mit Zinnenmarken als Bogen abgeschlossen. Darunter schwingt ein
-> Wegband von der Mitte der rechten Kante zur Mitte der Unterkante (11 %
-> breit); an der Kurve ein Wirtshaus mit rotem Schild und blauem Teich.
-> Übrige Fläche tiefgrüne Emailwiese.
+### Prompt — vollständig, zum Einfügen
 
-### 12/1 — EC_INN_CITYSTRAIGHT: Stadt oben, Querweg mit Wirtshaus
-> Die **Oberkante** ist über ihre volle Länge Stadt mit abschließender
-> Stadtmauer. Darunter läuft ein Wegband waagerecht mittig von der linken
-> zur rechten Kante (11 % breit); daran ein Wirtshaus mit rotem Schild und
-> blauem Teich. Untere Fläche tiefgrüne Emailwiese.
+```
+Image 1 ist die Vorlage. Sie definiert Inhalt und Geometrie: welche Karte an welcher Position liegt, wo jeder Weg, jeder Fluss und jede Stadt an welcher Kante austritt, wie breit sie sind und wie sie innerhalb der Karte verlaufen. Halte dich exakt daran, Punkt für Punkt. Erfinde keine eigenen Radien und keine eigenen Breiten.
 
-### 12/2 — EC_CITY_DIAG: zwei Städte über Eck, zwei Wege
-> Die **rechte** und die **untere** Kante sind je über ihre volle Länge
-> Stadt — zwei **getrennte** Stadtflächen, zwischen ihnen bleibt in der
-> Ecke unten rechts ein grüner Keil. Ein Wegband läuft von der Mitte der
-> Oberkante zur Mitte der linken Kante als Viertelkreis (11 % breit).
-> Übrige Fläche tiefgrüne Emailwiese.
+Image 2 ist AUSSCHLIESSLICH eine Materialprobe. Übernimm daraus die Farbigkeit, die Oberfläche, die Dichte des Rankenwerks und das Aussehen der Bänder und Bauten. Übernimm daraus NICHTS an Aufbau. Insbesondere hat Image 2 eine Klostermauer, die als Rahmen um die Karte herumläuft — so etwas darf auf keiner der hier beschriebenen Karten vorkommen, es macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
 
-### 12/3 — EC_TRIPLE_CITY: Stadt auf drei Seiten
-> **Ober-, rechte und linke Kante** sind über ihre volle Länge Stadt und
-> bilden **eine zusammenhängende** Goldfläche, die sich hufeisenförmig um
-> die untere Kartenmitte legt, dicht mit weißen Häusern und blauen Dächern
-> besetzt, nach unten von einer Stadtmauer mit Zinnenmarken begrenzt. Am
-> unteren Rand ein schmaler Streifen tiefgrüne Emailwiese mit Bäumen.
-> Kein Wappen.
+Ein einzelnes quadratisches Bild mit vier verschiedenen Spielkarten in einem 2×2-Raster, dazwischen ein schmaler neutralgrauer Steg. Jede Karte ist ein randvoll bemaltes Quadrat: kein Zierrahmen, keine abgerundeten Ecken, kein Schlagschatten, die Malerei läuft bis an alle vier Kanten.
 
-### 13/0 — EC_CITY_ROADPASS: Stadt oben und unten, Weg quer
-> **Ober- und Unterkante** sind je über ihre volle Länge Stadt — zwei
-> **getrennte** Stadtflächen mit weißen Häusern, blauen Dächern und
-> Stadtmauern zur Mitte hin. Dazwischen läuft ein Wegband waagerecht
-> mittig von der linken zur rechten Kante (11 % breit, Goldfassung) und
-> tritt an beiden Seiten durch ein goldenes Stadttor mit rotem Torflügel.
-> Beidseits des Wegs schmale grüne Streifen.
+Stil: illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel, Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn. Wiesen als tiefgrünes Email mit dicht eingelegten goldenen Ranken, winzigen weiß-rot-blauen Blüten und Bäumen als goldumrissene Bögen mit Goldperlen und dunkelrotem Stamm. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit schmaler Goldfassung. Flüsse als lapisblaue Emailbänder mit silberweißen Wellenlinien und schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche. Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf. Blattgold, Smaragdgrün, Lapisblau, Elfenbein, Zinnoberrot.
 
-### 13/1 — EC_CITY_FULL: Stadt rundum mit Wappen
-> Die ganze Karte ist Stadt: Goldgrund bis an alle vier Kanten, keine
-> Wiese, dicht besetzt mit weißen Häusern, blauen Ziegeldächern und zwei
-> Wehrtürmen mit roten Wimpeln. Rechts unten ein **blauer Rundschild mit
-> goldenem Sparren und zwei goldenen Kugeln**.
+Maße, die genau eingehalten werden müssen — sie sind aus den vorhandenen Bögen gemessen, nicht geschätzt:
+– Jeder Weg tritt mittig an seiner Kante aus, Mitte bei 50 % der Kantenlänge, Abweichung höchstens 1 %.
+– Der elfenbeinfarbene Kern eines Weges ist 10,5 bis 11 % der Kantenlänge breit, mit der Goldfassung zusammen 15 bis 16 %.
+– Jeder Fluss tritt mittig an seiner Kante aus, Mitte bei 50 %, und ist 18 bis 19 % der Kantenlänge breit.
+– Eine Stadt füllt ihre Kante über die volle Länge, von Ecke zu Ecke.
+– Diese Werte gelten an jeder Kante jeder Karte gleich. Ein Weg, der bei 44 % statt 50 % austritt oder 13 % statt 11 % breit ist, macht die Karte unbrauchbar: sie passt dann an keine andere.
+– Die Wiese ist gleichmäßig dicht mit Ranken belegt, so dicht wie in Image 2. Keine leeren Grünflächen.
+– Auf jeder Karte, die Wiese hat, stehen zwei bis vier Bäume und ein bis zwei goldene Äcker, über die Wiesenfläche verteilt, nicht an den Kanten geballt.
 
-### 13/2 — EC_DOUBLE_CURVE: zwei Wegkurven (Nordost und Südwest)
-> Zwei getrennte Wegbänder (je 11 % breit, Goldfassung): das erste
-> verbindet die Mitte der Oberkante mit der Mitte der rechten Kante in
-> einem Viertelkreis, das zweite die Mitte der Unterkante mit der Mitte
-> der linken Kante. Sie berühren einander nicht. Übrige Fläche tiefgrüne
-> Emailwiese mit Bäumen und einem goldenen Acker.
+Die vier Karten:
 
-### 13/3 — EC_DOUBLE_CURVE2: zwei Wegkurven (Nordwest und Südost)
-> Wie 13/2, aber gespiegelt: das erste Wegband verbindet die Mitte der
-> Oberkante mit der Mitte der linken Kante, das zweite die Mitte der
-> Unterkante mit der Mitte der rechten Kante.
+Oben links: In der oberen Kartenhälfte eine Quelle: ein runder, in Gold gefasster Quelltopf aus hellem Stein, aus dem Wasser tritt. Von dort läuft ein lapisblaues Emailband mit silberweißen Wellenlinien senkrecht nach unten und tritt mittig an der Unterkante aus, 18 % der Kantenlänge breit, mit schmaler Goldfassung. An keiner anderen Kante tritt Wasser aus. Die übrige Fläche ist Wiese mit dichten Ranken, Blüten, drei Bäumen und einem goldenen Acker.
 
-### 14/0 — EC_CROSS_CITY: Stadt oben mit Wappen, Wegkreuz unten
-> Die **Oberkante** ist über ihre volle Länge Stadt mit Stadtmauer und
-> einem **blauen Rundschild mit goldenem Sparren und zwei Kugeln**.
-> Darunter treffen sich drei Wegbänder in der Kartenmitte: von der Mitte
-> der rechten, der unteren und der linken Kante (je 11 % breit), am
-> Treffpunkt eine runde Goldscheibe mit blauem Auge. Übrige Fläche
-> tiefgrüne Emailwiese.
+Oben rechts: Ein lapisblaues Emailband mit silberweißen Wellenlinien tritt mittig an der Oberkante ein, 18 % der Kantenlänge breit, mit schmaler Goldfassung, läuft senkrecht nach unten und weitet sich in der unteren Kartenhälfte zu einem runden, in Gold gefassten See mit hellblauem Grund. An keiner anderen Kante tritt Wasser aus. Ringsum Wiese mit dichten Ranken, Blüten, zwei Bäumen und einem goldenen Acker.
 
-### 14/1 — EC_MON_ROAD2: Kloster mit durchgehender Straße
-> Ein Wegband läuft senkrecht mittig von der Oberkante zur Unterkante
-> durch die Karte (11 % breit). Rechts daneben steht ein Kloster: weiße
-> Kirche mit blauem Satteldach, goldenem Glockenturm mit Kreuz, ummauertem
-> Hof, Kräutergarten und blauem Zierteich. Übrige Fläche tiefgrüne
-> Emailwiese. **Kein Rahmen um die Karte** — die Klostermauer bleibt im
-> Inneren.
+Unten links: Ein lapisblaues Emailband mit silberweißen Wellenlinien läuft senkrecht von der Mitte der Oberkante zur Mitte der Unterkante durch die ganze Karte, an beiden Kanten 18 % der Kantenlänge breit, mit schmaler Goldfassung. In der Kartenmitte darf es leicht schwingen, an beiden Kanten sitzt es exakt mittig. Links und rechts Wiese mit dichten Ranken, Blüten, je zwei Bäumen und je einem goldenen Acker.
 
-### 14/2 — EC_CITY_GATE: Stadt oben mit Tor, Weg nach unten
-> Die **Oberkante** ist über ihre volle Länge Stadt mit weißen Häusern,
-> blauen Dächern und einer Stadtmauer, die nach unten durch ein großes
-> goldenes Stadttor mit rotem Torflügel und zwei Wehrtürmen unterbrochen
-> ist. Aus dem Tor führt ein Wegband senkrecht mittig zur Unterkante
-> (11 % breit). Beidseits tiefgrüne Emailwiese mit Bäumen.
+Unten rechts: Ein lapisblaues Emailband mit silberweißen Wellenlinien tritt mittig an der Unterkante ein und schwingt in einem gleichmäßigen Viertelkreis nach links zur Mitte der linken Kante, an beiden Kanten 18 % der Kantenlänge breit, mit schmaler Goldfassung. Beide Austritte sitzen genau bei 50 % ihrer Kante. Die übrige Fläche ist Wiese mit dichten Ranken, Blüten, drei Bäumen und zwei goldenen Äckern in der oberen rechten Hälfte.
+```
 
-### 14/3 — EC_CITY_3SHIELD: Stadt auf drei Seiten mit Doppelwappen
-> Wie 12/3 (zusammenhängende Stadt über Ober-, rechte und linke Kante,
-> Wiesenstreifen unten), zusätzlich **zwei** blaue Rundschilde mit
-> goldenem Sparren und zwei Kugeln, nebeneinander im oberen Drittel der
-> Stadtfläche.
+### Prüfen
+
+```
+node tools/bogen-pruefen.mjs bogen20_generiert.png RV_SPRING RV_LAKE RV_STRAIGHT RV_CURVE
+```
+
+### Danach in `grafik/bogen-belegung.json`
+
+```json
+"bogen20_generiert.png": [
+  { "id": "RV_SPRING", "dreh": 0 },
+  { "id": "RV_LAKE", "dreh": 0 },
+  { "id": "RV_STRAIGHT", "dreh": 0 },
+  { "id": "RV_CURVE", "dreh": 0 }
+]
+```
 
 ---
 
-# Tisch und Umgebung, fotorealistisch
+# Bogen 21 — Der Fluss — mit Weg und Stadt
 
-Der Tisch wird bisher im Code gerechnet (Eiche mit Jahresringen, Poren,
-Hobelspuren, drei Brettern und Wachsglanz). Fotorealistisch wird er erst
-mit echtem Bildmaterial. Gebraucht werden **drei nahtlose Kacheln**, keine
-fertigen Szenen — die Beleuchtung setzt das Spiel selbst darüber, damit
-das Kerzenlicht flackern kann.
+**Motive:** RV_BRIDGE · RV_ROADCURVE · RV_CITY · RV_CITY2
 
-### T1 — Tischplatte (wird gebraucht)
-> Fotorealistische Aufsicht senkrecht von oben auf eine massive, alte
-> Eichentischplatte. Drei breite Bretter mit dunklen Fugen und
-> angefasten Kanten, deutlich sichtbare Jahresringe und offene Poren,
-> feine Hobelspuren quer zur Faser, Gebrauchsspuren: Kratzer, dunkle
-> Flecken, matter Wachsglanz. Warmes Mittelbraun.
-> **Nahtlos kachelbar in beide Richtungen**, gleichmäßig diffus
-> ausgeleuchtet, **ohne Schlagschatten und ohne Lichtkegel**, 2048×2048 px.
+Die vier Flusskarten, auf denen noch etwas anderes liegt.
 
-Das „ohne Lichtkegel" ist entscheidend: eine Kachel mit eingebackenem
-Licht lässt sich nicht kacheln und flackert nicht mit.
+### Referenzbilder
 
-### T2 — Tischtuch (optional, für den Spielbereich)
-> Fotorealistische Aufsicht senkrecht von oben auf grobes, ungebleichtes
-> Leinen in Naturweiß mit sichtbarer Webstruktur, leichten Falten und
-> unregelmäßiger Verfärbung. Nahtlos kachelbar, gleichmäßig diffus
-> ausgeleuchtet, ohne Schatten, 2048×2048 px.
+* **Bild 1:** `bogen21-vorlage.png` — Inhalt und Geometrie. Referenzstärke **hoch**.
+* **Bild 2:** `referenzplatte.png` — nur Material. Referenzstärke **niedrig**.
 
-### T3 — Kartenrückseite (wird gebraucht, sobald ein Nachziehstapel sichtbar ist)
-> Fotorealistische Aufsicht senkrecht von oben auf die Rückseite einer
-> alten Spielkarte aus geprägtem Karton: dunkelrotbraune Grundfläche mit
-> einem regelmäßigen goldenen Rautenmuster, abgegriffene helle Kanten,
-> leichte Wölbung. Quadratisch, randvoll, ohne Schatten, 1024×1024 px.
+Achte darauf, dass Fluss und Straße unterschiedlich breit sind: der Fluss 18 %, die Straße 11 %. Auf Bogen 21 liegen beide nebeneinander, der Unterschied muss sichtbar sein.
+
+### Prompt — vollständig, zum Einfügen
+
+```
+Image 1 ist die Vorlage. Sie definiert Inhalt und Geometrie: welche Karte an welcher Position liegt, wo jeder Weg, jeder Fluss und jede Stadt an welcher Kante austritt, wie breit sie sind und wie sie innerhalb der Karte verlaufen. Halte dich exakt daran, Punkt für Punkt. Erfinde keine eigenen Radien und keine eigenen Breiten.
+
+Image 2 ist AUSSCHLIESSLICH eine Materialprobe. Übernimm daraus die Farbigkeit, die Oberfläche, die Dichte des Rankenwerks und das Aussehen der Bänder und Bauten. Übernimm daraus NICHTS an Aufbau. Insbesondere hat Image 2 eine Klostermauer, die als Rahmen um die Karte herumläuft — so etwas darf auf keiner der hier beschriebenen Karten vorkommen, es macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
+
+Ein einzelnes quadratisches Bild mit vier verschiedenen Spielkarten in einem 2×2-Raster, dazwischen ein schmaler neutralgrauer Steg. Jede Karte ist ein randvoll bemaltes Quadrat: kein Zierrahmen, keine abgerundeten Ecken, kein Schlagschatten, die Malerei läuft bis an alle vier Kanten.
+
+Stil: illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel, Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn. Wiesen als tiefgrünes Email mit dicht eingelegten goldenen Ranken, winzigen weiß-rot-blauen Blüten und Bäumen als goldumrissene Bögen mit Goldperlen und dunkelrotem Stamm. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit schmaler Goldfassung. Flüsse als lapisblaue Emailbänder mit silberweißen Wellenlinien und schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche. Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf. Blattgold, Smaragdgrün, Lapisblau, Elfenbein, Zinnoberrot.
+
+Maße, die genau eingehalten werden müssen — sie sind aus den vorhandenen Bögen gemessen, nicht geschätzt:
+– Jeder Weg tritt mittig an seiner Kante aus, Mitte bei 50 % der Kantenlänge, Abweichung höchstens 1 %.
+– Der elfenbeinfarbene Kern eines Weges ist 10,5 bis 11 % der Kantenlänge breit, mit der Goldfassung zusammen 15 bis 16 %.
+– Jeder Fluss tritt mittig an seiner Kante aus, Mitte bei 50 %, und ist 18 bis 19 % der Kantenlänge breit.
+– Eine Stadt füllt ihre Kante über die volle Länge, von Ecke zu Ecke.
+– Diese Werte gelten an jeder Kante jeder Karte gleich. Ein Weg, der bei 44 % statt 50 % austritt oder 13 % statt 11 % breit ist, macht die Karte unbrauchbar: sie passt dann an keine andere.
+– Die Wiese ist gleichmäßig dicht mit Ranken belegt, so dicht wie in Image 2. Keine leeren Grünflächen.
+– Auf jeder Karte, die Wiese hat, stehen zwei bis vier Bäume und ein bis zwei goldene Äcker, über die Wiesenfläche verteilt, nicht an den Kanten geballt.
+
+Die vier Karten:
+
+Oben links: Ein lapisblaues Emailband mit silberweißen Wellenlinien läuft senkrecht von der Mitte der Oberkante zur Mitte der Unterkante, 18 % der Kantenlänge breit, mit schmaler Goldfassung. Quer darüber läuft ein elfenbeinfarbenes, quer geripptes Wegband waagerecht von der Mitte der linken zur Mitte der rechten Kante, 11 % breit, mit Goldfassung. Wo beide sich kreuzen, überquert der Weg das Wasser auf einer steinernen Brücke mit zwei goldenen Rundbögen. In den vier Vierteln Wiese mit Ranken, Blüten und je einem Baum oder Acker.
+
+Oben rechts: Ein lapisblaues Emailband mit silberweißen Wellenlinien tritt mittig an der Unterkante ein und schwingt in einem Viertelkreis nach links zur Mitte der linken Kante, 18 % breit, mit Goldfassung. Getrennt davon tritt ein elfenbeinfarbenes, quer geripptes Wegband mittig an der Oberkante ein und schwingt in einem Viertelkreis nach rechts zur Mitte der rechten Kante, 11 % breit, mit Goldfassung. Weg und Fluss berühren einander nirgends. Dazwischen und ringsum Wiese mit dichten Ranken, Blüten, zwei Bäumen und einem Acker.
+
+Unten links: Ein lapisblaues Emailband mit silberweißen Wellenlinien läuft senkrecht von der Mitte der Oberkante zur Mitte der Unterkante, 18 % breit, mit Goldfassung. Rechts davon liegt eine Stadt, die die gesamte rechte Kante von Ecke zu Ecke füllt: Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. Die Stadt reicht nicht an den Fluss heran, dazwischen liegt ein Wiesenstreifen. Links vom Fluss Wiese mit Ranken, Blüten, zwei Bäumen und einem Acker.
+
+Unten rechts: Ein lapisblaues Emailband mit silberweißen Wellenlinien läuft senkrecht von der Mitte der Oberkante zur Mitte der Unterkante, 18 % breit, mit Goldfassung. Links davon liegt eine Stadt, die die gesamte linke Kante von Ecke zu Ecke füllt: Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. Die Stadt reicht nicht an den Fluss heran, dazwischen liegt ein Wiesenstreifen. Rechts vom Fluss Wiese mit Ranken, Blüten, zwei Bäumen und einem Acker.
+```
+
+### Prüfen
+
+```
+node tools/bogen-pruefen.mjs bogen21_generiert.png RV_BRIDGE RV_ROADCURVE RV_CITY RV_CITY2
+```
+
+### Danach in `grafik/bogen-belegung.json`
+
+```json
+"bogen21_generiert.png": [
+  { "id": "RV_BRIDGE", "dreh": 0 },
+  { "id": "RV_ROADCURVE", "dreh": 0 },
+  { "id": "RV_CITY", "dreh": 0 },
+  { "id": "RV_CITY2", "dreh": 0 }
+]
+```
 
 ---
 
-# Wenn ein Bogen fertig ist
+# Bogen 22 — Geschlossene Städte
 
-1. Datei nach `grafik/` legen.
-2. In `grafik/bogen-belegung.json` eintragen (Motiv-Kürzel und Drehung
-   je Quadrant).
-3. `node tools/kacheln-schneiden.mjs` — schneidet, dreht, skaliert auf
-   512 px und schreibt `grafik/karten/<Motiv>.webp`.
-4. Das Kürzel in `js/ui/render/paintings.js` in die Liste `GEMALT`
-   aufnehmen und in `sw.js` bei den Dateien ergänzen.
-5. `node tests/tiles-schema.test.mjs` und die Galerie unter
-   `debug/gallery.html` prüfen.
+**Motive:** EC_CATH · EC_CITY_FULL · EC_TRIPLE_CITY · EC_CITY_3SHIELD
+
+Die vier Karten, die ganz oder fast ganz aus Stadt bestehen.
+
+### Referenzbilder
+
+* **Bild 1:** `bogen22-vorlage.png` — Inhalt und Geometrie. Referenzstärke **hoch**.
+* **Bild 2:** `referenzplatte.png` — nur Material. Referenzstärke **niedrig**.
+
+Der Unterschied zwischen den beiden unteren Karten ist der wichtigste auf diesem Bogen: unten links sind es **drei getrennte** Städte, unten rechts ist es **eine einzige zusammenhängende**. Wird das verwechselt, stimmt die Wertung im Spiel nicht mehr.
+
+### Prompt — vollständig, zum Einfügen
+
+```
+Image 1 ist die Vorlage. Sie definiert Inhalt und Geometrie: welche Karte an welcher Position liegt, wo jeder Weg, jeder Fluss und jede Stadt an welcher Kante austritt, wie breit sie sind und wie sie innerhalb der Karte verlaufen. Halte dich exakt daran, Punkt für Punkt. Erfinde keine eigenen Radien und keine eigenen Breiten.
+
+Image 2 ist AUSSCHLIESSLICH eine Materialprobe. Übernimm daraus die Farbigkeit, die Oberfläche, die Dichte des Rankenwerks und das Aussehen der Bänder und Bauten. Übernimm daraus NICHTS an Aufbau. Insbesondere hat Image 2 eine Klostermauer, die als Rahmen um die Karte herumläuft — so etwas darf auf keiner der hier beschriebenen Karten vorkommen, es macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
+
+Ein einzelnes quadratisches Bild mit vier verschiedenen Spielkarten in einem 2×2-Raster, dazwischen ein schmaler neutralgrauer Steg. Jede Karte ist ein randvoll bemaltes Quadrat: kein Zierrahmen, keine abgerundeten Ecken, kein Schlagschatten, die Malerei läuft bis an alle vier Kanten.
+
+Stil: illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel, Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn. Wiesen als tiefgrünes Email mit dicht eingelegten goldenen Ranken, winzigen weiß-rot-blauen Blüten und Bäumen als goldumrissene Bögen mit Goldperlen und dunkelrotem Stamm. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit schmaler Goldfassung. Flüsse als lapisblaue Emailbänder mit silberweißen Wellenlinien und schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche. Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf. Blattgold, Smaragdgrün, Lapisblau, Elfenbein, Zinnoberrot.
+
+Maße, die genau eingehalten werden müssen — sie sind aus den vorhandenen Bögen gemessen, nicht geschätzt:
+– Jeder Weg tritt mittig an seiner Kante aus, Mitte bei 50 % der Kantenlänge, Abweichung höchstens 1 %.
+– Der elfenbeinfarbene Kern eines Weges ist 10,5 bis 11 % der Kantenlänge breit, mit der Goldfassung zusammen 15 bis 16 %.
+– Jeder Fluss tritt mittig an seiner Kante aus, Mitte bei 50 %, und ist 18 bis 19 % der Kantenlänge breit.
+– Eine Stadt füllt ihre Kante über die volle Länge, von Ecke zu Ecke.
+– Diese Werte gelten an jeder Kante jeder Karte gleich. Ein Weg, der bei 44 % statt 50 % austritt oder 13 % statt 11 % breit ist, macht die Karte unbrauchbar: sie passt dann an keine andere.
+– Die Wiese ist gleichmäßig dicht mit Ranken belegt, so dicht wie in Image 2. Keine leeren Grünflächen.
+– Auf jeder Karte, die Wiese hat, stehen zwei bis vier Bäume und ein bis zwei goldene Äcker, über die Wiesenfläche verteilt, nicht an den Kanten geballt.
+
+Die vier Karten:
+
+Oben links: Die gesamte Karte ist Stadt. Alle vier Kanten sind von Ecke zu Ecke Stadt, es gibt keine Wiese und keinen Weg. Goldgrund mit fein punziertem Korn, dicht besetzt mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen. In der Kartenmitte steht eine Kathedrale: ein großes weißes Kirchenschiff mit steilem lapisblauem Ziegeldach, zwei flankierenden Türmen mit goldenen Kreuzen und einem runden Fenster mit rot-blauem Maßwerk über dem Portal.
+
+Oben rechts: Die gesamte Karte ist Stadt. Alle vier Kanten sind von Ecke zu Ecke Stadt, es gibt keine Wiese und keinen Weg. Goldgrund mit fein punziertem Korn, dicht besetzt mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen. Keine Kathedrale. In der oberen rechten Hälfte hängt ein einzelner Wappenschild: ein spitz zulaufender lapisblauer Schild mit goldenem Querbalken und Goldrand.
+
+Unten links: Drei voneinander vollständig getrennte Städte. Die erste füllt die Oberkante von Ecke zu Ecke, die zweite die rechte Kante von Ecke zu Ecke, die dritte die linke Kante von Ecke zu Ecke. Jede ist Goldgrund mit weißen Häusern, blauen Dächern und roten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. Zwischen je zwei Städten liegt deutlich sichtbar ein Wiesenstreifen, sie berühren einander nirgends, auch nicht in den Ecken. Die Unterkante ist über ihre volle Länge Wiese, und die Wiese in der Kartenmitte hängt mit der Unterkante zusammen. Auf der Wiese zwei Bäume und ein goldener Acker. Kein Wappenschild.
+
+Unten rechts: Eine einzige zusammenhängende Stadt in U-Form. Sie füllt die Oberkante, die rechte Kante und die linke Kante jeweils von Ecke zu Ecke und ist über die obere Kartenhälfte durchgehend miteinander verbunden — es gibt keine Wiese zwischen den drei Kanten. Goldgrund mit weißen Häusern, blauen Dächern und roten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. In der Stadt hängen zwei Wappenschilde: spitz zulaufende lapisblaue Schilde mit goldenem Querbalken und Goldrand. Nur an der Unterkante liegt ein Wiesenstreifen über die volle Kantenlänge, mit Ranken, Blüten und einem Baum.
+```
+
+### Prüfen
+
+```
+node tools/bogen-pruefen.mjs bogen22_generiert.png EC_CATH EC_CITY_FULL EC_TRIPLE_CITY EC_CITY_3SHIELD
+```
+
+### Danach in `grafik/bogen-belegung.json`
+
+```json
+"bogen22_generiert.png": [
+  { "id": "EC_CATH", "dreh": 0 },
+  { "id": "EC_CITY_FULL", "dreh": 0 },
+  { "id": "EC_TRIPLE_CITY", "dreh": 0 },
+  { "id": "EC_CITY_3SHIELD", "dreh": 0 }
+]
+```
+
+---
+
+# Bogen 23 — Wirtshäuser und Doppelkurven
+
+**Motive:** EC_INN_STRAIGHT · EC_INN_CURVE · EC_INN_TJUNC · EC_DOUBLE_CURVE
+
+Reine Wegkarten der Erweiterung, ohne jede Stadt.
+
+### Referenzbilder
+
+* **Bild 1:** `bogen23-vorlage.png` — Inhalt und Geometrie. Referenzstärke **hoch**.
+* **Bild 2:** `referenzplatte.png` — nur Material. Referenzstärke **niedrig**.
+
+Ein Wirtshaus ist immer dasselbe: ein kleines weißes Gebäude mit blauem Ziegeldach und dunkelroter Tür, unmittelbar am Weg, mit einem goldenen Wirtshausschild an einem geschmiedeten Ausleger, der über den Weg ragt. Auf diesem Bogen kommt **keine Stadt** vor.
+
+### Prompt — vollständig, zum Einfügen
+
+```
+Image 1 ist die Vorlage. Sie definiert Inhalt und Geometrie: welche Karte an welcher Position liegt, wo jeder Weg, jeder Fluss und jede Stadt an welcher Kante austritt, wie breit sie sind und wie sie innerhalb der Karte verlaufen. Halte dich exakt daran, Punkt für Punkt. Erfinde keine eigenen Radien und keine eigenen Breiten.
+
+Image 2 ist AUSSCHLIESSLICH eine Materialprobe. Übernimm daraus die Farbigkeit, die Oberfläche, die Dichte des Rankenwerks und das Aussehen der Bänder und Bauten. Übernimm daraus NICHTS an Aufbau. Insbesondere hat Image 2 eine Klostermauer, die als Rahmen um die Karte herumläuft — so etwas darf auf keiner der hier beschriebenen Karten vorkommen, es macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
+
+Ein einzelnes quadratisches Bild mit vier verschiedenen Spielkarten in einem 2×2-Raster, dazwischen ein schmaler neutralgrauer Steg. Jede Karte ist ein randvoll bemaltes Quadrat: kein Zierrahmen, keine abgerundeten Ecken, kein Schlagschatten, die Malerei läuft bis an alle vier Kanten.
+
+Stil: illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel, Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn. Wiesen als tiefgrünes Email mit dicht eingelegten goldenen Ranken, winzigen weiß-rot-blauen Blüten und Bäumen als goldumrissene Bögen mit Goldperlen und dunkelrotem Stamm. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit schmaler Goldfassung. Flüsse als lapisblaue Emailbänder mit silberweißen Wellenlinien und schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche. Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf. Blattgold, Smaragdgrün, Lapisblau, Elfenbein, Zinnoberrot.
+
+Maße, die genau eingehalten werden müssen — sie sind aus den vorhandenen Bögen gemessen, nicht geschätzt:
+– Jeder Weg tritt mittig an seiner Kante aus, Mitte bei 50 % der Kantenlänge, Abweichung höchstens 1 %.
+– Der elfenbeinfarbene Kern eines Weges ist 10,5 bis 11 % der Kantenlänge breit, mit der Goldfassung zusammen 15 bis 16 %.
+– Jeder Fluss tritt mittig an seiner Kante aus, Mitte bei 50 %, und ist 18 bis 19 % der Kantenlänge breit.
+– Eine Stadt füllt ihre Kante über die volle Länge, von Ecke zu Ecke.
+– Diese Werte gelten an jeder Kante jeder Karte gleich. Ein Weg, der bei 44 % statt 50 % austritt oder 13 % statt 11 % breit ist, macht die Karte unbrauchbar: sie passt dann an keine andere.
+– Die Wiese ist gleichmäßig dicht mit Ranken belegt, so dicht wie in Image 2. Keine leeren Grünflächen.
+– Auf jeder Karte, die Wiese hat, stehen zwei bis vier Bäume und ein bis zwei goldene Äcker, über die Wiesenfläche verteilt, nicht an den Kanten geballt.
+
+Die vier Karten:
+
+Oben links: Ein elfenbeinfarbenes, quer geripptes Wegband läuft senkrecht mittig von der Oberkante zur Unterkante durch die ganze Karte, mit schmaler Goldfassung. Auf halber Höhe steht rechts am Weg ein Wirtshaus: weißes Gebäude, blaues Ziegeldach, dunkelrote Tür, goldenes Schild an geschmiedetem Ausleger über dem Weg. Links und rechts Wiese mit dichten Ranken, Blüten, zwei Bäumen und einem Acker.
+
+Oben rechts: Ein elfenbeinfarbenes, quer geripptes Wegband tritt mittig an der Unterkante ein und schwingt in einem gleichmäßigen Viertelkreis nach links zur Mitte der linken Kante, mit schmaler Goldfassung. Im Inneren des Bogens steht ein Wirtshaus: weißes Gebäude, blaues Ziegeldach, dunkelrote Tür, goldenes Schild an geschmiedetem Ausleger über dem Weg. Die übrige Fläche ist Wiese mit dichten Ranken, Blüten, zwei Bäumen und einem Acker.
+
+Unten links: Drei elfenbeinfarbene, quer gerippte Wegbänder treffen sich in der Kartenmitte: eines von der Mitte der rechten Kante, eines von der Mitte der Unterkante, eines von der Mitte der linken Kante, alle gleich breit mit Goldfassung. Am Treffpunkt eine runde Goldscheibe mit strahlenförmiger Rippung und blauem Emailauge. Am unteren Arm steht ein Wirtshaus: weißes Gebäude, blaues Ziegeldach, dunkelrote Tür, goldenes Schild an geschmiedetem Ausleger. Die obere Kartenhälfte ist durchgehend Wiese; an der Oberkante tritt kein Weg aus.
+
+Unten rechts: Zwei getrennte elfenbeinfarbene, quer gerippte Wegbänder, die einander nicht berühren. Das erste tritt mittig an der Oberkante ein und schwingt in einem Viertelkreis nach rechts zur Mitte der rechten Kante. Das zweite tritt mittig an der Unterkante ein und schwingt in einem Viertelkreis nach links zur Mitte der linken Kante. Beide gleich breit mit Goldfassung. Kein Wirtshaus und keine Wegscheibe. Zwischen den beiden Kurven verläuft ein breites diagonales Wiesenband von links oben nach rechts unten mit Ranken, Blüten und zwei Bäumen; in den beiden abgetrennten Ecken je ein goldener Acker.
+```
+
+### Prüfen
+
+```
+node tools/bogen-pruefen.mjs bogen23_generiert.png EC_INN_STRAIGHT EC_INN_CURVE EC_INN_TJUNC EC_DOUBLE_CURVE
+```
+
+### Danach in `grafik/bogen-belegung.json`
+
+```json
+"bogen23_generiert.png": [
+  { "id": "EC_INN_STRAIGHT", "dreh": 0 },
+  { "id": "EC_INN_CURVE", "dreh": 0 },
+  { "id": "EC_INN_TJUNC", "dreh": 0 },
+  { "id": "EC_DOUBLE_CURVE", "dreh": 0 }
+]
+```
+
+---
+
+# Bogen 24 — Stadt mit Weg
+
+**Motive:** EC_DOUBLE_CURVE2 · EC_INN_CITYCURVE · EC_INN_CITYSTRAIGHT · EC_CITY_GATE
+
+Vier Karten, auf denen eine Stadt an der Oberkante liegt und darunter ein Weg verläuft.
+
+### Referenzbilder
+
+* **Bild 1:** `bogen24-vorlage.png` — Inhalt und Geometrie. Referenzstärke **hoch**.
+* **Bild 2:** `referenzplatte.png` — nur Material. Referenzstärke **niedrig**.
+
+Auf drei dieser Karten füllt die Stadt die **Oberkante ganz**, von Ecke zu Ecke. Sie darf nicht vor der Ecke aufhören — sonst passt sie an keine andere Stadtkante.
+
+### Prompt — vollständig, zum Einfügen
+
+```
+Image 1 ist die Vorlage. Sie definiert Inhalt und Geometrie: welche Karte an welcher Position liegt, wo jeder Weg, jeder Fluss und jede Stadt an welcher Kante austritt, wie breit sie sind und wie sie innerhalb der Karte verlaufen. Halte dich exakt daran, Punkt für Punkt. Erfinde keine eigenen Radien und keine eigenen Breiten.
+
+Image 2 ist AUSSCHLIESSLICH eine Materialprobe. Übernimm daraus die Farbigkeit, die Oberfläche, die Dichte des Rankenwerks und das Aussehen der Bänder und Bauten. Übernimm daraus NICHTS an Aufbau. Insbesondere hat Image 2 eine Klostermauer, die als Rahmen um die Karte herumläuft — so etwas darf auf keiner der hier beschriebenen Karten vorkommen, es macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
+
+Ein einzelnes quadratisches Bild mit vier verschiedenen Spielkarten in einem 2×2-Raster, dazwischen ein schmaler neutralgrauer Steg. Jede Karte ist ein randvoll bemaltes Quadrat: kein Zierrahmen, keine abgerundeten Ecken, kein Schlagschatten, die Malerei läuft bis an alle vier Kanten.
+
+Stil: illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel, Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn. Wiesen als tiefgrünes Email mit dicht eingelegten goldenen Ranken, winzigen weiß-rot-blauen Blüten und Bäumen als goldumrissene Bögen mit Goldperlen und dunkelrotem Stamm. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit schmaler Goldfassung. Flüsse als lapisblaue Emailbänder mit silberweißen Wellenlinien und schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche. Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf. Blattgold, Smaragdgrün, Lapisblau, Elfenbein, Zinnoberrot.
+
+Maße, die genau eingehalten werden müssen — sie sind aus den vorhandenen Bögen gemessen, nicht geschätzt:
+– Jeder Weg tritt mittig an seiner Kante aus, Mitte bei 50 % der Kantenlänge, Abweichung höchstens 1 %.
+– Der elfenbeinfarbene Kern eines Weges ist 10,5 bis 11 % der Kantenlänge breit, mit der Goldfassung zusammen 15 bis 16 %.
+– Jeder Fluss tritt mittig an seiner Kante aus, Mitte bei 50 %, und ist 18 bis 19 % der Kantenlänge breit.
+– Eine Stadt füllt ihre Kante über die volle Länge, von Ecke zu Ecke.
+– Diese Werte gelten an jeder Kante jeder Karte gleich. Ein Weg, der bei 44 % statt 50 % austritt oder 13 % statt 11 % breit ist, macht die Karte unbrauchbar: sie passt dann an keine andere.
+– Die Wiese ist gleichmäßig dicht mit Ranken belegt, so dicht wie in Image 2. Keine leeren Grünflächen.
+– Auf jeder Karte, die Wiese hat, stehen zwei bis vier Bäume und ein bis zwei goldene Äcker, über die Wiesenfläche verteilt, nicht an den Kanten geballt.
+
+Die vier Karten:
+
+Oben links: Zwei getrennte elfenbeinfarbene, quer gerippte Wegbänder, die einander nicht berühren. Das erste tritt mittig an der Oberkante ein und schwingt in einem Viertelkreis nach links zur Mitte der linken Kante. Das zweite tritt mittig an der rechten Kante ein und schwingt in einem Viertelkreis nach unten zur Mitte der Unterkante. Beide gleich breit mit Goldfassung. Keine Stadt, kein Wirtshaus, keine Wegscheibe. Zwischen den beiden Kurven verläuft ein breites diagonales Wiesenband von rechts oben nach links unten mit Ranken, Blüten und drei Bäumen; in den beiden abgetrennten Ecken je ein goldener Acker.
+
+Oben rechts: Die Oberkante ist über ihre volle Länge Stadt, von Ecke zu Ecke: Goldgrund mit weißen Häusern, blauen Dächern und roten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. Darunter tritt ein elfenbeinfarbenes, quer geripptes Wegband mittig an der rechten Kante ein und schwingt in einem Viertelkreis nach unten zur Mitte der Unterkante, mit Goldfassung. Im Inneren des Bogens steht ein Wirtshaus: weißes Gebäude, blaues Ziegeldach, dunkelrote Tür, goldenes Schild an geschmiedetem Ausleger. Die linke Kante ist über ihre volle Länge Wiese. Auf der Wiese Ranken, Blüten, zwei Bäume und ein Acker.
+
+Unten links: Die Oberkante ist über ihre volle Länge Stadt, von Ecke zu Ecke: Goldgrund mit weißen Häusern, blauen Dächern und roten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. Darunter läuft ein elfenbeinfarbenes, quer geripptes Wegband waagerecht von der Mitte der linken zur Mitte der rechten Kante quer durch die Karte, mit Goldfassung. Auf halber Strecke steht unterhalb des Weges ein Wirtshaus: weißes Gebäude, blaues Ziegeldach, dunkelrote Tür, goldenes Schild an geschmiedetem Ausleger über dem Weg. Die Unterkante ist über ihre volle Länge Wiese, mit Ranken, Blüten, zwei Bäumen und einem Acker.
+
+Unten rechts: Die Oberkante ist über ihre volle Länge Stadt, von Ecke zu Ecke: Goldgrund mit weißen Häusern, blauen Dächern und roten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. In der Mauer sitzt mittig ein Stadttor mit goldenem Rundbogen und dunkelroten Torflügeln. Ein elfenbeinfarbenes, quer geripptes Wegband tritt mittig an der Unterkante ein, läuft senkrecht nach oben und endet am Stadttor; an der Oberkante tritt es nicht aus. Linke und rechte Kante sind über ihre volle Länge Wiese, mit Ranken, Blüten, zwei Bäumen und einem Acker.
+```
+
+### Prüfen
+
+```
+node tools/bogen-pruefen.mjs bogen24_generiert.png EC_DOUBLE_CURVE2 EC_INN_CITYCURVE EC_INN_CITYSTRAIGHT EC_CITY_GATE
+```
+
+### Danach in `grafik/bogen-belegung.json`
+
+```json
+"bogen24_generiert.png": [
+  { "id": "EC_DOUBLE_CURVE2", "dreh": 0 },
+  { "id": "EC_INN_CITYCURVE", "dreh": 0 },
+  { "id": "EC_INN_CITYSTRAIGHT", "dreh": 0 },
+  { "id": "EC_CITY_GATE", "dreh": 0 }
+]
+```
+
+---
+
+# Bogen 25 — Stadt und Weg gemischt — drei Karten
+
+**Motive:** EC_CITY_DIAG · EC_CITY_ROADPASS · EC_CROSS_CITY
+
+Die letzten drei Kartenmotive mit Stadt und Weg. Dieser Bogen trägt nur drei Karten.
+
+### Referenzbilder
+
+* **Bild 1:** `bogen25-vorlage.png` — Inhalt und Geometrie. Referenzstärke **hoch**.
+* **Bild 2:** `referenzplatte.png` — nur Material. Referenzstärke **niedrig**.
+
+Das Feld **unten rechts bleibt leer und neutralgrau**. Male dort nichts hinein, auch keine vierte Karte und keine Verzierung.
+
+### Prompt — vollständig, zum Einfügen
+
+```
+Image 1 ist die Vorlage. Sie definiert Inhalt und Geometrie: welche Karte an welcher Position liegt, wo jeder Weg, jeder Fluss und jede Stadt an welcher Kante austritt, wie breit sie sind und wie sie innerhalb der Karte verlaufen. Halte dich exakt daran, Punkt für Punkt. Erfinde keine eigenen Radien und keine eigenen Breiten.
+
+Image 2 ist AUSSCHLIESSLICH eine Materialprobe. Übernimm daraus die Farbigkeit, die Oberfläche, die Dichte des Rankenwerks und das Aussehen der Bänder und Bauten. Übernimm daraus NICHTS an Aufbau. Insbesondere hat Image 2 eine Klostermauer, die als Rahmen um die Karte herumläuft — so etwas darf auf keiner der hier beschriebenen Karten vorkommen, es macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
+
+Ein einzelnes quadratisches Bild mit einem 2×2-Raster, dazwischen ein schmaler neutralgrauer Steg. Nur drei der vier Felder tragen eine Spielkarte: oben links, oben rechts und unten links. Das Feld unten rechts bleibt vollständig leer und neutralgrau, ohne jede Malerei. Jede der drei Karten ist ein randvoll bemaltes Quadrat: kein Zierrahmen, keine abgerundeten Ecken, kein Schlagschatten, die Malerei läuft bis an alle vier Kanten.
+
+Stil: illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel, Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn. Wiesen als tiefgrünes Email mit dicht eingelegten goldenen Ranken, winzigen weiß-rot-blauen Blüten und Bäumen als goldumrissene Bögen mit Goldperlen und dunkelrotem Stamm. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit schmaler Goldfassung. Flüsse als lapisblaue Emailbänder mit silberweißen Wellenlinien und schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche. Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf. Blattgold, Smaragdgrün, Lapisblau, Elfenbein, Zinnoberrot.
+
+Maße, die genau eingehalten werden müssen — sie sind aus den vorhandenen Bögen gemessen, nicht geschätzt:
+– Jeder Weg tritt mittig an seiner Kante aus, Mitte bei 50 % der Kantenlänge, Abweichung höchstens 1 %.
+– Der elfenbeinfarbene Kern eines Weges ist 10,5 bis 11 % der Kantenlänge breit, mit der Goldfassung zusammen 15 bis 16 %.
+– Jeder Fluss tritt mittig an seiner Kante aus, Mitte bei 50 %, und ist 18 bis 19 % der Kantenlänge breit.
+– Eine Stadt füllt ihre Kante über die volle Länge, von Ecke zu Ecke.
+– Diese Werte gelten an jeder Kante jeder Karte gleich. Ein Weg, der bei 44 % statt 50 % austritt oder 13 % statt 11 % breit ist, macht die Karte unbrauchbar: sie passt dann an keine andere.
+– Die Wiese ist gleichmäßig dicht mit Ranken belegt, so dicht wie in Image 2. Keine leeren Grünflächen.
+– Auf jeder Karte, die Wiese hat, stehen zwei bis vier Bäume und ein bis zwei goldene Äcker, über die Wiesenfläche verteilt, nicht an den Kanten geballt.
+
+Die drei Karten:
+
+Oben links: Ein elfenbeinfarbenes, quer geripptes Wegband tritt mittig an der Oberkante ein und schwingt in einem Viertelkreis nach links zur Mitte der linken Kante, mit Goldfassung. Außerdem zwei voneinander vollständig getrennte Städte: die erste füllt die rechte Kante von Ecke zu Ecke, die zweite die Unterkante von Ecke zu Ecke. Beide sind Goldgrund mit weißen Häusern, blauen Dächern und roten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. In der unteren rechten Ecke liegt zwischen ihnen deutlich sichtbar ein Wiesenstreifen; sie berühren einander nirgends. Zwischen Wegkurve und Städten Wiese mit Ranken, Blüten, zwei Bäumen und einem Acker.
+
+Oben rechts: Zwei voneinander vollständig getrennte Städte: die erste füllt die Oberkante von Ecke zu Ecke, die zweite die Unterkante von Ecke zu Ecke. Beide sind Goldgrund mit weißen Häusern, blauen Dächern und roten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. Zwischen ihnen bleibt die mittlere Kartenhälfte frei. Dort läuft ein elfenbeinfarbenes, quer geripptes Wegband waagerecht von der Mitte der linken zur Mitte der rechten Kante quer durch, mit Goldfassung. Ober- und unterhalb des Weges je ein schmaler Wiesenstreifen mit Ranken, Blüten und je einem Baum.
+
+Unten links: Die Oberkante ist über ihre volle Länge Stadt, von Ecke zu Ecke: Goldgrund mit weißen Häusern, blauen Dächern und roten Türen, zum Land hin von einer goldenen Mauer mit quadratischen Zinnenmarken begrenzt. In der Stadt hängt ein Wappenschild: ein spitz zulaufender lapisblauer Schild mit goldenem Querbalken und Goldrand. Darunter treffen sich drei elfenbeinfarbene, quer gerippte Wegbänder in der Kartenmitte: eines von der Mitte der rechten Kante, eines von der Mitte der Unterkante, eines von der Mitte der linken Kante, alle gleich breit mit Goldfassung. Am Treffpunkt eine runde Goldscheibe mit strahlenförmiger Rippung und blauem Emailauge. Zwischen Stadt und Wegen Wiese mit Ranken, Blüten und zwei Bäumen.
+```
+
+### Prüfen
+
+```
+node tools/bogen-pruefen.mjs bogen25_generiert.png EC_CITY_DIAG EC_CITY_ROADPASS EC_CROSS_CITY
+```
+
+### Danach in `grafik/bogen-belegung.json`
+
+```json
+"bogen25_generiert.png": [
+  { "id": "EC_CITY_DIAG", "dreh": 0 },
+  { "id": "EC_CITY_ROADPASS", "dreh": 0 },
+  { "id": "EC_CROSS_CITY", "dreh": 0 },
+  null
+]
+```
+
+---
+
+# Bogen 26 — Die beiden Klosterkarten — zwei Karten
+
+**Motive:** RV_MON · EC_MON_ROAD2
+
+Die letzten beiden Motive. Dieser Bogen trägt nur zwei Karten.
+
+### Referenzbilder
+
+* **Bild 1:** `bogen26-vorlage.png` — Inhalt und Geometrie. Referenzstärke **hoch**.
+* **Bild 2:** `referenzplatte.png` — nur Material. Referenzstärke **niedrig**.
+
+**Die Klostermauer darf nicht um die Karte herumlaufen.** Sie umschließt einen kompakten Hof mitten auf der Karte und lässt an allen vier Kanten Wiese frei. Genau dieser Fehler steckt in Image 2 — dort läuft die Mauer als Rahmen bis fast an den Rand, und wenn sich das fortsetzt, sieht das zusammengelegte Spielfeld aus wie ein Kachelgitter. Die gesamte untere Hälfte des Bogens bleibt leer und neutralgrau.
+
+### Prompt — vollständig, zum Einfügen
+
+```
+Image 1 ist die Vorlage. Sie definiert Inhalt und Geometrie: welche Karte an welcher Position liegt, wo jeder Weg, jeder Fluss und jede Stadt an welcher Kante austritt, wie breit sie sind und wie sie innerhalb der Karte verlaufen. Halte dich exakt daran, Punkt für Punkt. Erfinde keine eigenen Radien und keine eigenen Breiten.
+
+Image 2 ist AUSSCHLIESSLICH eine Materialprobe. Übernimm daraus die Farbigkeit, die Oberfläche, die Dichte des Rankenwerks und das Aussehen der Bänder und Bauten. Übernimm daraus NICHTS an Aufbau. Insbesondere hat Image 2 eine Klostermauer, die als Rahmen um die Karte herumläuft — so etwas darf auf keiner der hier beschriebenen Karten vorkommen, es macht aus dem zusammengelegten Spielfeld ein Kachelgitter.
+
+Ein einzelnes quadratisches Bild mit einem 2×2-Raster, dazwischen ein schmaler neutralgrauer Steg. Nur die beiden oberen Felder tragen eine Spielkarte, oben links und oben rechts. Die gesamte untere Hälfte bleibt vollständig leer und neutralgrau, ohne jede Malerei. Beide Karten sind randvoll bemalte Quadrate: kein Zierrahmen, keine abgerundeten Ecken, kein Schlagschatten, die Malerei läuft bis an alle vier Kanten.
+
+Stil: illuminierte Handschrift des 13. Jahrhunderts als Champlevé-Emailtafel, Limoges-Arbeit. Blattgoldgrund mit fein punziertem, gehämmertem Korn. Wiesen als tiefgrünes Email mit dicht eingelegten goldenen Ranken, winzigen weiß-rot-blauen Blüten und Bäumen als goldumrissene Bögen mit Goldperlen und dunkelrotem Stamm. Städte als Goldgrund mit weißen Häusern, blauen Ziegeldächern und dunkelroten Türen; Stadtmauern als Goldband mit quadratischen Zinnenmarken. Wege als elfenbeinfarbene, quer gerippte Bänder mit schmaler Goldfassung. Flüsse als lapisblaue Emailbänder mit silberweißen Wellenlinien und schmaler Goldfassung. Äcker als goldene Rechtecke mit geritzter Furche. Aufsicht, streng senkrecht von oben, keine Perspektive, kein Schattenwurf. Blattgold, Smaragdgrün, Lapisblau, Elfenbein, Zinnoberrot.
+
+Maße, die genau eingehalten werden müssen — sie sind aus den vorhandenen Bögen gemessen, nicht geschätzt:
+– Jeder Weg tritt mittig an seiner Kante aus, Mitte bei 50 % der Kantenlänge, Abweichung höchstens 1 %.
+– Der elfenbeinfarbene Kern eines Weges ist 10,5 bis 11 % der Kantenlänge breit, mit der Goldfassung zusammen 15 bis 16 %.
+– Jeder Fluss tritt mittig an seiner Kante aus, Mitte bei 50 %, und ist 18 bis 19 % der Kantenlänge breit.
+– Eine Stadt füllt ihre Kante über die volle Länge, von Ecke zu Ecke.
+– Diese Werte gelten an jeder Kante jeder Karte gleich. Ein Weg, der bei 44 % statt 50 % austritt oder 13 % statt 11 % breit ist, macht die Karte unbrauchbar: sie passt dann an keine andere.
+– Die Wiese ist gleichmäßig dicht mit Ranken belegt, so dicht wie in Image 2. Keine leeren Grünflächen.
+– Auf jeder Karte, die Wiese hat, stehen zwei bis vier Bäume und ein bis zwei goldene Äcker, über die Wiesenfläche verteilt, nicht an den Kanten geballt.
+
+Die beiden Karten:
+
+Oben links: Ein lapisblaues Emailband mit silberweißen Wellenlinien tritt mittig an der Unterkante ein und schwingt in einem gleichmäßigen Viertelkreis nach links zur Mitte der linken Kante, an beiden Kanten 18 % der Kantenlänge breit, mit schmaler Goldfassung. In der oberen rechten Hälfte, mit deutlichem Abstand zu allen vier Kanten, steht ein Kloster: ein weißes Kirchengebäude mit lapisblauem Ziegeldach, einem Turm mit goldenem Kreuz und dunkelroter Tür, umgeben von einer niedrigen goldenen Hofmauer, die einen kompakten Hof umschließt und nirgends an den Kartenrand reicht. Keine Straße. Ringsum Wiese mit dichten Ranken, Blüten, zwei Bäumen und einem Acker.
+
+Oben rechts: In der Kartenmitte, mit deutlichem Abstand zu allen vier Kanten, steht ein Kloster: ein weißes Kirchengebäude mit lapisblauem Ziegeldach, einem Turm mit goldenem Kreuz und dunkelroter Tür, umgeben von einer niedrigen goldenen Hofmauer, die einen kompakten Hof umschließt und nirgends an den Kartenrand reicht. Ein elfenbeinfarbenes, quer geripptes Wegband tritt mittig an der Oberkante ein, läuft senkrecht nach unten und endet am Klostertor. Ein zweites, gleich breites Wegband tritt mittig an der Unterkante ein, läuft senkrecht nach oben und endet ebenfalls am Kloster. Beide Wege sind durch das Kloster voneinander getrennt und gehen nicht ineinander über. Linke und rechte Kante sind über ihre volle Länge Wiese, mit Ranken, Blüten, zwei Bäumen und einem Acker.
+```
+
+### Prüfen
+
+```
+node tools/bogen-pruefen.mjs bogen26_generiert.png RV_MON EC_MON_ROAD2
+```
+
+### Danach in `grafik/bogen-belegung.json`
+
+```json
+"bogen26_generiert.png": [
+  { "id": "RV_MON", "dreh": 0 },
+  { "id": "EC_MON_ROAD2", "dreh": 0 },
+  null,
+  null
+]
+```
+
+---
+
+## Wenn alle acht Bögen da sind
+
+1. Dateien nach `grafik/`
+2. Einträge in `grafik/bogen-belegung.json` (`null` für leere Quadranten)
+3. `node tools/kacheln-schneiden.mjs`
+4. Motiv-Kürzel in `js/ui/render/paintings.js` (Liste `GEMALT`) **und** in `sw.js`
+5. `node tests/regeln.test.mjs` und die übrigen Suiten
+
+Danach sind alle 49 Motive gemalt, und `tools/stadt-zu-wiese.mjs` wird nicht
+mehr gebraucht — die vier Karten, die es gebaut hat, sind dann durch gemalte
+ersetzt.
