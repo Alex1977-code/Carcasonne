@@ -53,6 +53,40 @@ Deshalb wird jeder neue Bogen vor der Übernahme **gemessen**, nicht
 angesehen: `tools/kacheln-schneiden.mjs` schneidet, die Messung sitzt in der
 Prüfroutine daneben.
 
+## Der Randvertrag regelt die Naht, nicht das Aussehen
+
+Gemeldet als „wege sehen unterschiedlich aus", und der Einwand stimmt. Der
+Vertrag sagt, wo ein Weg austritt und wie breit das Band ist. Was *im* Band
+gemalt ist, sagt er nicht — und genau daran laufen die Lieferungen
+auseinander.
+
+    node tools/wege-vergleichen.mjs
+
+Der ununterbrochene helle Streifen macht zwischen **71 %** (K, ein glatter
+Elfenbeinstreifen mit dünnem Goldrand) und **21 %** (EC_CITY_ROADPASS, ein
+schmaler Cremestreifen in dichtem Goldgitter) des Bandes aus. Stufenlos
+dazwischen alles andere. Die Sättigung läuft von 17 % (EC_INN_STRAIGHT,
+fast weiß) bis 34 % (RV_BRIDGE, warmes Creme). Jede dieser Karten hält den
+Vertrag; nebeneinandergelegt sehen sie nach zwei Spielen aus.
+
+Zwei Werkzeuge, zwei Absichten — die Zahlen widersprechen sich nicht,
+sie messen Verschiedenes:
+
+* `karten-pruefen.mjs` überbrückt beim Messen Lücken bis 2 %, weil sonst
+  Goldornament im Weg die Karte zu Unrecht als zu schmal meldet. Für die
+  Naht ist das richtig.
+* `wege-vergleichen.mjs` überbrückt nichts. Der Unterschied zwischen beiden
+  Zahlen **ist** die Ornamentdichte.
+
+Beide messen nur bis 5 % Tiefe. Tiefer geht es nicht: die Messung läuft
+senkrecht zur Kante, und ein gekrümmter Weg verlässt diese Senkrechte nach
+wenigen Prozent. Ein Entwurf, der bis 22 % maß, meldete für P einen Schwund
+von −768 %. Was ein Weg in der Kartenmitte tut, zeigt nur der Kontaktbogen.
+
+Die Breite des hellen Kerns ist seit diesem Befund eine **Beanstandung**,
+keine Anmerkung mehr. Vorher stand im Code, ein schmaler Kern sei
+„Geschmackssache" — das war falsch.
+
 ## Jeden neuen Bogen erst messen
 
     node tools/bogen-pruefen.mjs <bild.png> U V W X
@@ -73,6 +107,9 @@ derselbe Ablauf mit anderen Werkzeugen:
 
     node tools/karten-pruefen.mjs grafik/*.png      # messen
     node tools/karten-einbauen.mjs grafik/*.png     # zuschneiden, 512 px, WebP
+    node tools/karten-fluchten.mjs --probe          # Versatz rechnen
+    node tools/karten-einbauen.mjs grafik/*.png     # versetzt neu zuschneiden
+    node tools/karten-fluchten.mjs                  # Karten ohne Original
     node tools/karten-pruefen.mjs grafik/karten/*.webp   # danach noch einmal
 
 Das Motiv kommt aus dem Dateinamen: `EC_CATH.png` ergibt EC_CATH,
@@ -94,6 +131,33 @@ Drei Dinge, die dabei aufgefallen sind und wiederkommen werden:
   Werkzeug „kein Weg an der Kante". Widerspricht eine einzelne Kante dem
   Bild, ist es meistens das. Die Schwelle steht in `karten-pruefen.mjs`
   bei einer Sättigung von 0,45.
+
+## Fluchten: die halbe Handbreit, die man sieht
+
+Der Randvertrag verlangt 50 %, geliefert wird 49 bis 53,6 %. Jede einzelne
+Karte besteht die Prüfung, und trotzdem springt die Straße an jeder Naht –
+gemessen bis zu 4,6 % der Kantenlänge, auf einem Telefon rund zehn Punkte.
+Das fällt beim Spielen sofort auf und in der Einzelansicht überhaupt nicht.
+
+Neu malen muss man dafür nichts. Sitzt ein Weg an der Nordkante bei 51,5 %,
+ist die ganze Karte um 1,5 % zu weit rechts, und ein Versatz bringt ihn in
+die Mitte. `tools/karten-fluchten.mjs` rechnet das aus; angewendet wird es
+beim Zuschneiden, damit am Rand kein Streifen frei wird.
+
+Drei Dinge, über die ich dabei gestolpert bin:
+
+* **Der Versatz muss sich aufsummieren.** `grafik/versatz.json` hält den
+  Gesamtwert, nicht den Rest der letzten Messung – `karten-einbauen.mjs`
+  schneidet immer aus dem unversehrten Original.
+* **Erst den Mittelpunkt, dann die Größe.** Nimmt man das größte Quadrat und
+  verschiebt es danach, liegt es schon am Rand an und kann sich nicht mehr
+  bewegen.
+* **Eckabzug je Ecke.** Der größte Wert für alle vier Seiten frisst bei einer
+  einzigen grauen Ecke die Stadt am gegenüberliegenden Rand weg.
+
+Flüsse werden gemessen, aber nicht verschoben: ihre breiten steinernen Ufer
+lassen die Messung um mehr als einen Punkt springen, und ein Versatz daraus
+macht die Karte schlechter statt besser.
 
 ## Neue Bögen einbauen
 

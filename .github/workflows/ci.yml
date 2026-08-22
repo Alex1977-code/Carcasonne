@@ -17,13 +17,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Engine-Tests
-        run: node tests/engine.test.mjs
-      - name: Regelprüfung (offizieller Regelsatz)
-        run: node tests/regeln.test.mjs
-      - name: Kachelschema (Renderer-Adapter)
-        run: node tests/tiles-schema.test.mjs
-      - name: Farbprüfung (Spielerfarben, Trennring)
-        run: node tests/palette.test.mjs
-      - name: Determinismus des Renderers
-        run: node tests/render-determinism.test.mjs
+      - name: Alle Suiten
+        # Nicht einzeln aufzaehlen. Vorher stand hier eine Liste, und
+        # tests/qr.test.mjs fehlte darin – der Encoder lief zwei Commits
+        # lang ungeprueft durch die CI. Was im Ordner liegt, wird gelaufen.
+        run: |
+          set -e
+          gefunden=0
+          for t in tests/*.test.mjs; do
+            echo "=== $t"
+            node "$t"
+            gefunden=$((gefunden + 1))
+          done
+          if [ "$gefunden" -lt 5 ]; then
+            echo "Nur $gefunden Suiten gefunden – da fehlt etwas." >&2
+            exit 1
+          fi
+          echo "$gefunden Suiten gelaufen."

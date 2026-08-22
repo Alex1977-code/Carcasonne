@@ -4,10 +4,12 @@
 import { DEFS, deckSizeFor } from '../engine/tiles.js';
 import {
   newGame, cloneState, legalPlacements, placeCurrent, meepleOptions,
-  finishTurn, serialize, resumeGame,
+  meepleBesetzt, finishTurn, serialize, resumeGame,
 } from '../engine/game.js';
 import { chooseMove } from '../engine/ai.js';
 import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld } from './render.js';
+import { spreizeSpots } from './spot-layout.js';
+import { qrZeichnen } from './qr.js';
 import { sfx, applySoundOptions, unlockAudio, startMusic, stopMusic, soundState } from './sound.js';
 import { Net } from './net.js';
 import { PLAYER_HEXES, PLAYER_NAMES } from './render/meeple-colors.js';
@@ -337,6 +339,7 @@ $('btnHost').addEventListener('click', async () => {
     $('onlineOff').classList.add('hidden');
     $('onlineHost').classList.remove('hidden');
     $('roomCode').textContent = net.code;
+    zeigeRaumCode(net.code);
     $('hostStatus').textContent = 'Warte auf Mitspieler…';
     // Lokal reicht ab jetzt 1 Spieler
     renderPlayerRows();
@@ -346,6 +349,39 @@ $('btnHost').addEventListener('click', async () => {
     $('btnHost').disabled = false;
   }
 });
+
+/**
+ * Die Adresse, unter der man diesem Raum beitritt.
+ *
+ * Die Kamera-App des Telefons öffnet, was im QR-Code steht – also muss
+ * dort eine vollständige Adresse stehen und kein bloßer Code. Der Raum
+ * hängt hinten dran; beim Öffnen liest ihn `raumAusAdresse()` wieder aus
+ * und trägt ihn ein.
+ */
+function beitrittsAdresse(code) {
+  return location.href.split('#')[0] + '#raum=' + code;
+}
+
+/** Den QR-Code für einen Raum zeichnen. */
+function zeigeRaumCode(code) {
+  const canvas = $('roomQr');
+  if (!canvas) return;
+  try {
+    qrZeichnen(canvas, beitrittsAdresse(code), { modul: 6 });
+  } catch (e) {
+    // Ohne QR geht es weiter – der Code steht daneben und lässt sich
+    // eintippen. Ein fehlendes Bild ist kein Grund, den Raum nicht zu
+    // öffnen.
+    canvas.classList.add('hidden');
+    console.warn('QR-Code nicht erzeugt:', e.message);
+  }
+}
+
+/** Steht in der Adresse ein Raum? Dann den Code, sonst null. */
+function raumAusAdresse() {
+  const m = /[#&]raum=([A-Za-z0-9]{3,8})/.exec(location.hash || '');
+  return m ? m[1].toUpperCase() : null;
+}
 
 function wireHostNet(net) {
   net.onGuestJoin = () => { /* Name kommt mit hello */ };
@@ -676,6 +712,7 @@ function startLoop() {
       legal: humanPlace && options.hints ? legalPlacements(G) : null,
       sel: ui.sel && G.drawn && G.phase === 'place' ? { ...ui.sel, defId: G.drawn } : null,
       meepleSpots: ui.meeple ? ui.meeple.spots : null,
+      meepleBesetzt: ui.meeple ? ui.meeple.besetzt : null,
       floaters: ui.floaters,
       lastPlaced: ui.lastPlaced,
       anim: options.anim ? ui.anim : null,
@@ -889,19 +926,66 @@ bc.addEventListener('wheel', (e) => {
   board.cam.scale = Math.min(200, Math.max(14, board.cam.scale * f));
 }, { passive: false });
 
+/**
+ * Die Marken der Auswahlphase in Weltkoordinaten, auseinandergerückt.
+ * Die Figur selbst steht später weiterhin auf ihrem unverschobenen Punkt –
+ * verschoben wird nur, was man antippt und sieht.
+ */
+function markenLegen(opts) {
+  const p = G.placed[G.lastPlacedIdx];
+  // Die besetzten Gebiete rücken mit auseinander, obwohl man sie nicht
+  // antippen kann. Täte man das nicht, läge die besetzte Stadt unter der
+  // freien Wiese, und die Auskunft wäre wieder unsichtbar.
+  const besetzt = meepleBesetzt(G);
+  const alle = [...opts, ...besetzt];
+  const roh = alle.map((o) => meepleSpotWorld(G, o));
+  const lokal = roh.map((w) => ({ x: w.wx - (p.x - 0.5), y: w.wy - (p.y - 0.5) }));
+  const weit = spreizeSpots(lokal);
+  const welt = (i) => ({ wx: p.x - 0.5 + weit[i].x, wy: p.y - 0.5 + weit[i].y });
+  return {
+    spots: opts.map((o, i) => ({
+      ...welt(i), fi: o.fi, t: o.t, color: G.players[G.current].color,
+    })),
+    besetzt: besetzt.map((b, i) => ({
+      ...welt(opts.length + i), fi: b.fi, t: b.t, color: G.players[b.pl].color,
+    })),
+  };
+}
+
 function handleTap(sx, sy) {
   if (!G || G.phase === 'over') return;
   if (ui.meeple) { // Meeple-Phase: Punkt getroffen?
+    // Der NÄCHSTE Punkt gewinnt, nicht der erste in der Liste. Das ist
+    // nicht dasselbe: die Punkte kommen in der Reihenfolge der Segmente,
+    // und der Trefferkreis ist mit 0,2 Kachelbreiten größer als der
+    // Abstand mancher Punkte zueinander. Auf Motiv O liegt der Wiesenpunkt
+    // 0,178 Kachelbreiten neben dem Straßenpunkt – wer die Wiese antippte,
+    // setzte den Gefolgsmann auf die Straße, weil die Straße in der Liste
+    // vorher kommt. Betroffen waren elf Punkte auf acht Motiven.
     const s = board.cam.scale;
+    let treffer = null, naechste = null, kleinster = Infinity;
     for (const spot of ui.meeple.spots) {
       const [px, py] = board.worldToScreen(spot.wx, spot.wy);
-      if (Math.hypot(px - sx, py - sy) < Math.max(24, s * 0.2)) {
-        sfx.meeple();
-        const big = ui.bigNext || G.players[G.current].meeples <= 0;
-        ui.meeple = null;
-        finishTurnSafe({ fi: spot.fi, big });
-        return;
-      }
+      const d = Math.hypot(px - sx, py - sy);
+      if (d < kleinster) { kleinster = d; naechste = spot; }
+    }
+    if (naechste && kleinster < Math.max(24, s * 0.2)) treffer = naechste;
+    // Kein Punkt genau getroffen? Dann zählt, wohin auf der eben gelegten
+    // Karte getippt wurde. Auf Motiv F etwa liegen alle drei Punkte in der
+    // Mittelspalte; wer die Stadt anfassen will, tippt auf das Goldband am
+    // linken oder rechten Rand – und traf damit vorher nichts. Der Tipp
+    // muss auf der Karte selbst liegen, sonst setzt ein Fehlgriff neben
+    // dem Brett einen Gefolgsmann.
+    if (!treffer && naechste) {
+      const p = G.placed[G.lastPlacedIdx];
+      const [cx, cy] = board.screenToCell(sx, sy);
+      if (cx === p.x && cy === p.y) treffer = naechste;
+    }
+    if (treffer) {
+      sfx.meeple();
+      const big = ui.bigNext || G.players[G.current].meeples <= 0;
+      ui.meeple = null;
+      finishTurnSafe({ fi: treffer.fi, big });
     }
     return;
   }
@@ -952,13 +1036,7 @@ $('btnConfirm').addEventListener('click', () => {
     finishTurnSafe(null);
     return;
   }
-  ui.meeple = {
-    opts,
-    spots: opts.map(o => {
-      const w = meepleSpotWorld(G, o);
-      return { ...w, fi: o.fi, color: G.players[G.current].color };
-    }),
-  };
+  ui.meeple = { opts, ...markenLegen(opts) };
   updateHud();
 });
 
@@ -1180,9 +1258,69 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 
 refreshMenu();
 
+// Steht ein Raum in der Adresse, führt der Weg direkt in den
+// Beitritts-Dialog. Genau das passiert, wenn jemand den QR-Code mit der
+// Kamera aufnimmt und auf die Adresse tippt: ohne das landete er im
+// Hauptmenü und müsste den Code doch wieder abtippen.
+{
+  const raum = raumAusAdresse();
+  if (raum) {
+    // Den Raum aus der Adresse nehmen, damit ein späteres Neuladen nicht
+    // erneut in den Dialog springt.
+    history.replaceState(null, '', location.href.split('#')[0]);
+    backTarget = 'menu';
+    showScreen('setup');
+    $('btnJoin').click();
+    $('joinCode').value = raum;
+    $('joinName').focus();
+  }
+}
+
 // Debug-/Test-Hook (auch nützlich als „Zug vorschlagen“)
 window.__carc = {
   get state() { return G; },
+  /**
+   * Eine bestimmte Karte an eine bestimmte Stelle legen und in die
+   * Meeple-Phase gehen – für Prüfläufe. Ohne das lässt sich ein einzelnes
+   * Motiv nicht gezielt herbeiführen, und genau das braucht man, um einen
+   * gemeldeten Fehler nachzustellen.
+   */
+  lege(defId, x, y, rot = 0) {
+    if (!G || G.phase === 'over') return null;
+    G.drawn = defId;
+    G.phase = 'place';
+    G.legalCache = null;
+    ui.sel = null;
+    placeCurrent(G, x, y, rot);
+    const opts = meepleOptions(G);
+    ui.meeple = opts.length ? { opts, ...markenLegen(opts) } : null;
+    updateHud();
+    return opts.map((o) => ({ fi: o.fi, t: o.t, spot: o.spot }));
+  },
+  /** Die angebotenen Plätze mit ihrer Lage auf dem Bildschirm. */
+  plaetze() {
+    if (!ui.meeple) return [];
+    return ui.meeple.spots.map((sp) => {
+      const [sx, sy] = board.worldToScreen(sp.wx, sp.wy);
+      return { fi: sp.fi, t: sp.t, sx: Math.round(sx), sy: Math.round(sy) };
+    });
+  },
+  /** Die gesperrten Gebiete mit ihrer Lage auf dem Bildschirm. */
+  besetzte() {
+    if (!ui.meeple || !ui.meeple.besetzt) return [];
+    return ui.meeple.besetzt.map((sp) => {
+      const [sx, sy] = board.worldToScreen(sp.wx, sp.wy);
+      return { fi: sp.fi, t: sp.t, sx: Math.round(sx), sy: Math.round(sy) };
+    });
+  },
+  /** Zug beenden, wahlweise mit einem Gefolgsmann auf Segment `fi`. */
+  beende(fi = null) {
+    if (!G || G.phase !== 'meeple') return false;
+    ui.meeple = null;
+    finishTurnSafe(fi === null ? null
+      : { fi, big: G.players[G.current].meeples <= 0 });
+    return true;
+  },
   autoMove() {
     if (G && isHumanTurn() && G.phase === 'place' && !ui.meeple && !ui.aiBusy) {
       ui.aiBusy = true;

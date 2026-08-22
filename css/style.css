@@ -185,6 +185,29 @@ body.in-game #vignette { display: none; }
   border-radius: 10px; padding: 4px 10px; margin-left: 6px;
   user-select: all;
 }
+/* QR-Code und Anleitung nebeneinander, auf schmalen Geraeten untereinander.
+   Der Code bekommt einen hellen Rand: die Ruhezone gehoert zum Code, und
+   auf dunklem Grund findet ihn mancher Leser sonst nicht. */
+.qr-block {
+  display: flex; gap: 14px; align-items: flex-start;
+  flex-wrap: wrap; margin: 10px 0 12px;
+}
+.qr-block canvas {
+  width: 168px; height: 168px; flex: none;
+  background: #f4ead6; border-radius: 8px; padding: 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  image-rendering: pixelated;      /* scharfe Module statt weicher Kanten */
+}
+.anleitung {
+  margin: 0; padding-left: 1.2em; flex: 1 1 190px;
+  font-size: 0.86rem; line-height: 1.45; color: #d9c8a6;
+}
+.anleitung li { margin-bottom: 5px; }
+.anleitung b { color: #f3e2be; }
+@media (max-width: 380px) {
+  .qr-block canvas { width: 140px; height: 140px; }
+}
+
 .text-input {
   width: 100%; margin-bottom: 10px;
   background: rgba(0,0,0,0.25); color: #eef1f6;
@@ -249,7 +272,9 @@ body.in-game #vignette { display: none; }
    Pergament, alles darin bekommt Tinte statt heller Schrift.        */
 :is(.panel, .modal-box) h3 { color: #6b3f14; }
 :is(.panel, .modal-box) .hint, :is(.panel, .modal-box) .check em, :is(.panel, .modal-box) .seg button em,
-:is(.panel, .modal-box) .room-line, :is(.panel, .modal-box) .roster li { color: #6f5734; }
+:is(.panel, .modal-box) .room-line, :is(.panel, .modal-box) .roster li,
+:is(.panel, .modal-box) .anleitung { color: #6f5734; }
+:is(.panel, .modal-box) .anleitung b { color: #4a3216; }
 :is(.panel, .modal-box) .check input { border-color: #8a6a3c; background: rgba(255,255,255,0.5); }
 :is(.panel, .modal-box) .check input:checked { background: #8a5a16; border-color: #5f3d0c; }
 :is(.panel, .modal-box) .check input:checked::after { color: #fff4d8; }
