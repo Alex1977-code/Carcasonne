@@ -139,22 +139,51 @@ const messung = await page.evaluate(async (anzahl) => {
       return '?';
     };
 
-    const ein = N * 0.03, kanten = [], uebergaenge = [];
+    // Auf mehreren Tiefen abtasten und den Mittelwert nehmen.
+    //
+    // Eine einzelne Tiefe reicht nicht. Auf sechs Karten – L, O, P, W,
+    // RV_CITY2, EC_INN_STRAIGHT – liegt bei 3 % ein dunkler Schattenstreifen;
+    // dort kippt der Weg stellenweise nach Stadt, und das Werkzeug meldete
+    // eine falsche Kantenfolge, obwohl der Weg bei 1 % und bei 5 % tadellos
+    // sitzt. Über sieben Tiefen gemessen stimmen 45 von 46 Kantenfolgen; die
+    // sechs Fehlmeldungen sind weg.
+    const TIEFEN = [0.010, 0.015, 0.020, 0.025, 0.030, 0.035, 0.040];
+    const median = (a) => {
+      const b = [...a].sort((x, y) => x - y);
+      return b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2;
+    };
+    const kanten = [], uebergaenge = [];
     for (const seite of [0, 1, 2, 3]) {
-      const arr = [];
-      for (let k = 0; k <= 400; k++) {
-        const u = (k / 400) * (N - 1);
-        let x, y;
-        if (seite === 0) { x = u; y = ein; }
-        if (seite === 1) { x = N - 1 - ein; y = u; }
-        if (seite === 2) { x = u; y = N - 1 - ein; }
-        if (seite === 3) { x = ein; y = u; }
-        arr.push(cls(x, y));
-      }
-      const zahl = (k) => arr.filter((a) => a === k).length;
-      const mitte = arr.slice(160, 241);
-      const zm = (k) => mitte.filter((a) => a === k).length;
-      kanten.push(zahl('C') >= 264 ? 'C' : zm('F') >= 25 ? 'W' : zm('R') >= 25 ? 'R' : 'F');
+      const proTiefe = TIEFEN.map((t) => {
+        const ein = N * t, arr = [];
+        for (let k = 0; k <= 400; k++) {
+          const u = (k / 400) * (N - 1);
+          let x, y;
+          if (seite === 0) { x = u; y = ein; }
+          if (seite === 1) { x = N - 1 - ein; y = u; }
+          if (seite === 2) { x = u; y = N - 1 - ein; }
+          if (seite === 3) { x = ein; y = u; }
+          arr.push(cls(x, y));
+        }
+        return arr;
+      });
+      // Kantenart je Tiefe bestimmen, dann die häufigste nehmen.
+      const stimmen = proTiefe.map((arr) => {
+        const zahl = (k) => arr.filter((a) => a === k).length;
+        const mitte = arr.slice(160, 241);
+        const zm = (k) => mitte.filter((a) => a === k).length;
+        return zahl('C') >= 264 ? 'C' : zm('F') >= 25 ? 'W' : zm('R') >= 25 ? 'R' : 'F';
+      });
+      // Für die Kantenart zählen die flachen Tiefen. Was an der Kante liegt,
+      // entscheidet sich an der Kante – weiter innen fängt das Innenleben des
+      // Bauteils an. Bei RV_CITY2 ist die Westkante bis 2 % durchgehend
+      // Stadtmauer und zerfällt dahinter in weiße Häuser; über alle sieben
+      // Tiefen gemittelt käme dort Wiese heraus, und die Karte wäre zu
+      // Unrecht beanstandet.
+      const zaehler = {};
+      stimmen.slice(0, 3).forEach((v) => { zaehler[v] = (zaehler[v] || 0) + 1; });
+      kanten.push(Object.keys(zaehler).sort((a, b) => zaehler[b] - zaehler[a])[0]);
+      const arr = proTiefe[3];   // mittlere Tiefe, um die Läufe zu finden
 
       // Nur das messen, was an dieser Kante laut Kantenfolge liegt. Sonst
       // meldet das Werkzeug die steinernen Ufer eines Flusses als Weg und
@@ -173,28 +202,90 @@ const messung = await page.evaluate(async (anzahl) => {
           if (k < arr.length && arr[k] === art) { if (st < 0) st = k; }
           else if (st >= 0) { laeufe.push([st, k]); st = -1; }
         }
+        // Beim Fluss dürfen die Bruchstücke weiter auseinanderliegen: die
+        // silbernen Wellenlinien zerschneiden das Blau in Streifen, die
+        // breiter sind als die zwei Prozent, die für einen Weg reichen.
+        const LUECKE = art === 'F' ? 7.0 : 2.0;
         const gefasst = [];
         for (const l of laeufe) {
           const vor = gefasst[gefasst.length - 1];
-          if (vor && (l[0] - vor[1]) / 400 * 100 <= 2.0) vor[1] = l[1];
+          if (vor && (l[0] - vor[1]) / 400 * 100 <= LUECKE) vor[1] = l[1];
           else gefasst.push([...l]);
         }
-        for (const [a, b] of gefasst) {
+        // Der Lauf, der die Kantenmitte enthält, ist der gesuchte. Ohne
+        // diese Vorgabe nimmt die Messung den breitesten – und auf
+        // RV_CITY2 sind das die blauen Ziegeldächer der Stadt, die der
+        // Klassifikator für Wasser hält. Gemeldet wurde dann ein Fluss bei
+        // 15,5 % der Kante, den es dort gar nicht gibt.
+        const mittig = gefasst.filter((l) => l[0] <= 200 && l[1] >= 200);
+        const kandidaten = mittig.length ? mittig : gefasst;
+        for (const [a, b] of kandidaten) {
           const kern = ((b - a) / 400) * 100;
           if (kern <= 4) continue;
           // Das ganze Band: von der Kernmitte nach außen, solange keine
           // Wiese kommt. Das schließt die Goldfassung mit ein.
           const mid = Math.round((a + b) / 2);
-          let li = mid, re = mid;
+          let li = a, re = b - 1;
           while (li > 0 && arr[li - 1] !== 'w') li--;
           while (re < 400 && arr[re + 1] !== 'w') re++;
           const band = ((re - li + 1) / 400) * 100;
-          // Für die Lage zählt das Band, nicht der Kern: das Band ist die
-          // Grenze gegen die Wiese, und die muss an der Naht zusammenpassen.
-          const m = (((li + re + 1) / 2) / 400) * 100;
+          // Für die Lage zählt beim Weg das Band, nicht der Kern: das Band ist
+          // die Grenze gegen die Wiese, und die muss an der Naht
+          // zusammenpassen. Beim Fluss zählt das Wasser (siehe unten).
+          const m = art === 'F'
+            ? (((a + b) / 2) / 400) * 100
+            : (((li + re + 1) / 2) / 400) * 100;
           if (uebergaenge.some((u) => u.seite === 'NOSW'[seite] && u.art === art &&
               Math.abs(u.mitte - m) < 1)) continue;
-          uebergaenge.push({ seite: 'NOSW'[seite], art, kern, band, mitte: m });
+          // Lage und Breiten über alle Tiefen mitteln: ein einzelner
+          // Schattenstreifen verschiebt die Messung sonst um mehr als das,
+          // was der Randvertrag zulässt.
+          const mAlle = [], kAlle = [], bAlle = [];
+          const spalt = Math.round((LUECKE / 100) * 400);
+          for (const arr2 of proTiefe) {
+            // Vom Mittelpunkt nach außen, und dabei dieselben Lücken
+            // überbrücken wie oben. Ohne das wird der Fluss viel zu schmal
+            // gemessen: die silbernen Wellenlinien schneiden das Blau in
+            // Streifen, und ein Lauf, der stur an der ersten Linie endet,
+            // ergibt 5 % statt 18 %. Gemeldet wurde dann „Fluss zu schmal"
+            // für einen Fluss, der die richtige Breite hat.
+            const weiter = (von, richtung) => {
+              let k = von;
+              for (;;) {
+                let p = k + richtung, lug = 0;
+                while (p >= 0 && p <= 400 && arr2[p] !== art && lug < spalt) { p += richtung; lug++; }
+                if (p < 0 || p > 400 || arr2[p] !== art) return k;
+                k = p;
+              }
+            };
+            // Der Mittelpunkt der mittleren Tiefe muss auf dieser Tiefe nicht
+            // getroffen sein – bei angeschnittenem Ornament weicht er ein
+            // paar Punkte ab. Innerhalb einer Lückenbreite gilt er noch.
+            let anker = -1;
+            for (let d = 0; d <= spalt && anker < 0; d++) {
+              if (arr2[mid + d] === art) anker = mid + d;
+              else if (arr2[mid - d] === art) anker = mid - d;
+            }
+            if (anker < 0) continue;
+            const lo = weiter(anker, -1), ro = weiter(anker, +1);
+            let lb = lo, rb = ro;
+            while (lb > 0 && arr2[lb - 1] !== 'w') lb--;
+            while (rb < 400 && arr2[rb + 1] !== 'w') rb++;
+            kAlle.push(((ro - lo + 1) / 400) * 100);
+            bAlle.push(((rb - lb + 1) / 400) * 100);
+            // Wo die Mitte sitzt, entscheidet beim Weg das Band – es ist die
+            // Grenze gegen die Wiese, und die muss an der Naht zusammenpassen.
+            // Beim Fluss zählt das Wasser: seine steinernen Ufer sind
+            // unterschiedlich breit und lassen die Bandmitte um mehrere
+            // Prozent wandern, ohne dass die Karte deshalb schlechter passt.
+            mAlle.push(art === 'F'
+              ? (((lo + ro + 1) / 2) / 400) * 100
+              : (((lb + rb + 1) / 2) / 400) * 100);
+          }
+          uebergaenge.push({ seite: 'NOSW'[seite], art,
+            kern: kAlle.length ? median(kAlle) : kern,
+            band: bAlle.length ? median(bAlle) : band,
+            mitte: mAlle.length ? median(mAlle) : m });
         }
       }
     }
