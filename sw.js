@@ -16,7 +16,7 @@
 // Wartezeit ist gedeckelt: kommt binnen drei Sekunden nichts, gilt der
 // Cache. Bei schlechtem Empfang startet das Spiel dadurch genauso schnell
 // wie vorher.
-const CACHE = 'carcassonne-v19';
+const CACHE = 'carcassonne-v21';
 const FRIST = 3000;   // so lange wird höchstens auf das Netz gewartet
 const ASSETS = [
   './',
@@ -39,6 +39,7 @@ const ASSETS = [
   './js/ui/render/cache.js',
   './js/ui/render/contract.js',
   './js/ui/render/fields.js',
+  './js/ui/render/figures.js',
   './js/ui/render/glass.js',
   './js/ui/render/landmarks.js',
   './js/ui/render/layers.js',
@@ -98,6 +99,17 @@ const ASSETS = [
   './grafik/karten/V.webp',
   './grafik/karten/W.webp',
   './grafik/karten/X.webp',
+  // Fotografierte Spielfiguren und Tischplatte. Fehlt eine Datei, faellt
+  // das Spiel auf den gezeichneten Stein bzw. die gerechnete Holzkachel
+  // zurueck – deshalb ist die Liste nicht heikel.
+  './grafik/figuren/rot.webp',
+  './grafik/figuren/blau.webp',
+  './grafik/figuren/gelb.webp',
+  './grafik/figuren/gruen.webp',
+  './grafik/figuren/schwarz.webp',
+  './grafik/figuren/violett.webp',
+  './grafik/figuren/grau.webp',
+  './grafik/tischplatte.webp',
   './js/lib/peerjs.min.js',
   './manifest.webmanifest',
   './icon.svg',

@@ -9,10 +9,11 @@ import { find } from '../engine/game.js';
 import { drawFields } from './render/fields.js';
 import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
-import { SCHEIBEN as SCHEIBEN_ROH, RUTEN, BLEI, scheibenTon } from './render/glass.js';
+import { KOERPER, facetten, glasToene, LICHT, RAND_TIEFE, RAND_ABZUG } from './render/glass.js';
 import { PALETTE, shade as pshade, withAlpha, mix } from './render/palette.js';
-import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset } from './render/ambience.js';
+import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset, loadTable } from './render/ambience.js';
 import { paintingFor, loadPaintings, onPaintingLoaded } from './render/paintings.js';
+import { figureFor, loadFigures, FOTO_KASTEN, FOTO_RAND } from './render/figures.js';
 import { drawTown } from './render/buildings.js';
 import { drawMonastery, drawCathedral } from './render/landmarks.js';
 import { registerLayer, renderTile } from './render/layers.js';
@@ -59,7 +60,7 @@ const EDGE_MID = [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]];
 // Arme als konvexe Bögen mit runden Enden, Beinzwischenraum als U mit
 // Radius statt V-Kerbe, Fußlinie leicht nach außen gewölbt.
 // Koordinatensystem 0…100, Figurenhöhe 100.
-const MEEPLE_PATH = new Path2D(
+export const MEEPLE_PATH = new Path2D(
   // Kopf: Kreis r = 17 um (50, 23), tangential in die Schulter auslaufend
   'M50 6 ' +
   'C59.4 6 67 13.6 67 23 ' +
@@ -92,67 +93,73 @@ const MEEPLE_PATH = new Path2D(
   'C33 13.6 40.6 6 50 6 Z'
 );
 
-// ---------- Bleiglas ----------
+// ---------- Geschliffener Stein ----------
 //
-// Die Figur ist eine Glasscheibe, keine Plastikmarke. Drei Dinge machen den
-// Unterschied, und alle drei stehen unten im Code:
+// Die Figur ist ein geschliffener Stein: farbig, durchscheinend, mit
+// Facetten, die das Licht in harten Kanten brechen. Das Rezept – welche
+// Facetten wo liegen und wie hell sie werden – steht als reine Rechnung in
+// render/glass.js, damit tests/palette.test.mjs es ohne Browser prüfen
+// kann. Hier steht nur, wie daraus ein Bild wird.
 //
-//   Bleiruten. Die dunklen Stege, die die Scheiben halten. Sie sind das
-//   Erste, was man an einem Kirchenfenster erkennt – ohne sie ist es nur
-//   eine bunte Fläche. Sie laufen dort, wo die Figur ohnehin Gelenke hat:
-//   unter dem Kopf, an den Schultern entlang, um die Hüfte, zwischen den
-//   Beinen. Deshalb sitzen die Felder unten auf denselben Ankerpunkten wie
-//   die Silhouette und nicht auf frei gewählten.
+// Fünf Schichten, und jede hat einen Grund:
 //
-//   Durchlicht statt Auflicht. Vorher lag ein Radialverlauf auf der Figur,
-//   als schiene eine Lampe darauf. Glas leuchtet von hinten: in der Mitte
-//   einer Scheibe am hellsten, zum Blei hin dunkler. Bei dunklen
-//   Spielerfarben muss dieses Leuchten kräftiger sein, sonst bleibt
-//   Schwarz eine schwarze Fläche – die Stärke hängt deshalb an der
-//   Helligkeit der Farbe.
+//   Der Lichtfleck. Unter der Figur liegt kein grauer Schatten mehr,
+//   sondern ein farbiger Schein plus ein kleiner dunkler Kern direkt unter
+//   den Füßen. Ein durchscheinender Stein wirft beides: Licht, das durch
+//   ihn hindurchgeht und sich darunter sammelt, und Kontakt dort, wo er
+//   aufsitzt. Nur der Kern macht ihn stehend, nur der Schein macht ihn
+//   durchsichtig.
 //
-//   Ungleiche Scheiben. Kein Glaser schneidet neun Felder aus derselben
-//   Tafel. Kopf, Brust, Bauch, Arme und Beine bekommen leicht verschiedene
-//   Tönungen, dazu ein paar Schlieren – Kathedralglas ist nie gleichmäßig.
+//   Der Schein außen. Er ist immer heller als die Füllung und trägt die
+//   Silhouette dort, wo ein dunkler Stein auf dunklem Grund steht.
 //
-// Der Trennring aus meeple-colors.js bleibt, aber mit fester Rollenteilung:
-// die Bleirute ist immer dunkel, der Schein außen immer hell. Vorher hing
-// beides an der Füllfarbe. Auf jedem Untergrund trägt damit mindestens
-// einer der beiden – helles Blei gibt es nicht.
+//   Die Facetten. Je Körperteil eine Tafel und ein Kranz, beschnitten auf
+//   den Bereich. Ihre Helligkeit kommt aus dem Winkel zum Licht.
 //
-// Formen, Töne und Rutenverlauf stehen in render/glass.js, weil sie als
-// reine Rechnung prüfbar sein müssen: das Aufhellen und der Farbstich
-// dürfen den Abstand der Spielerfarben nicht auffressen, und das prüft
-// tests/palette.test.mjs an der gemalten Figur.
-const SCHEIBEN = SCHEIBEN_ROH.map((s) => ({ ...s, p: new Path2D(s.d) }));
-const CAME = new Path2D();
-for (const d of RUTEN) CAME.addPath(new Path2D(d));
+//   Die Tiefe. Ein Verlauf über die ganze Figur, hell oben links: ohne ihn
+//   ist der Schliff ein flaches Muster, weil jede Facette nur ihre eigene
+//   Neigung kennt und nicht, wo am Körper sie sitzt.
+//
+//   Das Funkeln. Kleine vierstrahlige Blitze an Facettenknoten auf der
+//   Lichtseite, dazu eine helle Brechungskante innen an der Silhouette.
+//   Feste Stellen – im Zeichenweg wird nicht gewürfelt, sonst flackert die
+//   Figur bei jedem Bild.
+const BEREICHE = KOERPER.map((k) => ({
+  k,
+  pfad: new Path2D(k.d),
+  facetten: facetten(k).map((f) => ({ ...f, pfad: new Path2D(f.d) })),
+}));
 
-/** Schlieren im Glas. Feste Lagen – im Zeichenweg wird nicht gewürfelt. */
-const STREAKS = [
-  { d: 'M-12 40 L112 -18', w: 5.0, a: 0.055 },
-  { d: 'M-12 58 L112 0',   w: 1.8, a: 0.040 },
-  { d: 'M-12 86 L112 26',  w: 3.2, a: 0.050 },
-  { d: 'M-12 126 L112 64', w: 6.5, a: 0.038 },
-].map((s) => ({ ...s, p: new Path2D(s.d) }));
+/**
+ * Wo es blitzt: Knoten des Schliffs auf der Lichtseite.
+ *
+ * Weniger und kleiner als im ersten Anlauf. Dort waren es breite weiße
+ * Kreuze, und die sahen aufgeklebt aus – ein Blitz an einem Stein ist ein
+ * Punkt mit kurzen Strahlen, kein Stern.
+ */
+const FUNKEN = [
+  { x: 43, y: 17, r: 4.4, a: 0.95 },
+  { x: 40, y: 46, r: 2.8, a: 0.70 },
+  { x: 27, y: 58, r: 2.4, a: 0.60 },
+  { x: 37, y: 79, r: 2.2, a: 0.55 },
+];
+
+// Die fertige Figur je Farbe einmal zeichnen und aufheben. Über sechzig
+// Facetten je Figur wären bei zwanzig Gefolgsleuten auf dem Brett mehr als
+// tausend Füllungen pro Bild. Gezeichnet wird in einem Kasten von -10 bis
+// 110, damit der Schein außen hineinpasst.
+const GLAS_KASTEN = 120, GLAS_RAND = 10, GLAS_PX = 288;
+const glasCache = new Map();
 
 const rgbOf = (hex) => {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
-/** Wahrgenommene Helligkeit 0…1 – entscheidet, wie stark das Glas leuchtet. */
+/** Wahrgenommene Helligkeit 0…1 – entscheidet, wie stark der Stein leuchtet. */
 const helligkeit = (hex) => {
   const [r, g, b] = rgbOf(hex);
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 };
-
-// Die fertige Figur je Farbe einmal zeichnen und aufheben. Sie hängt an
-// nichts als der Farbe: Größe macht der Aufruf, und die Verläufe wären
-// sonst bei zwanzig Gefolgsleuten auf dem Brett vierzig neue Objekte je
-// Bild. Gezeichnet wird in einem Kasten von -10 bis 110, damit der Schein
-// außen hineinpasst.
-const GLAS_KASTEN = 120, GLAS_RAND = 10, GLAS_PX = 288;
-const glasCache = new Map();
 
 function glasFigur(color) {
   const hit = glasCache.get(color);
@@ -170,102 +177,111 @@ function glasFigur(color) {
   const schein = helligkeit(rings.inner) >= helligkeit(rings.outer) ? rings.inner : rings.outer;
   const hell = helligkeit(color);
 
-  // Schein außen: das Licht, das am Blei vorbeigeht. Er ist immer heller
-  // als die Füllung und trägt die Silhouette dort, wo das dunkle Blei mit
-  // einem dunklen Untergrund verschmilzt.
-  g.lineWidth = 13;
+  // Schein außen
+  g.lineWidth = 12;
   g.strokeStyle = schein;
-  g.globalAlpha = 0.55;
+  g.globalAlpha = 0.5;
   g.stroke(MEEPLE_PATH);
   g.globalAlpha = 1;
 
-  // Grundton: der Rumpf.
+  g.save();
+  g.clip(MEEPLE_PATH);
+
   g.fillStyle = color;
   g.fill(MEEPLE_PATH);
 
-  g.save();
-  g.clip(MEEPLE_PATH);
-
-  // Die einzelnen Scheiben. Drei Dinge unterscheiden sie: Helligkeit, weil
-  // das Licht von oben links kommt; ein kleiner Stich ins Warme oder Kalte,
-  // weil kein Glaser sechs Felder aus derselben Tafel schneidet; und ein
-  // eigener Lichtpunkt, weil jede Scheibe für sich durchleuchtet wird.
-  //
-  // Der Stich bleibt klein genug, dass die Spielerfarbe eine Farbe bleibt:
-  // die Palette ist auf größten Abstand über Deuteranopie und Protanopie
-  // gerechnet, und das darf ein Stilmittel nicht aufweichen.
-  //
-  // Wie stark das Durchlicht ist, hängt an der Helligkeit der Farbe. Dunkles
-  // Glas braucht mehr davon, sonst bleibt Schwarz eine schwarze Fläche –
-  // und Schwarz ist eine Spielerfarbe.
-  const staerke = 0.09 + (1 - hell) * 0.20;
-  for (const sch of SCHEIBEN) {
+  // Die Farben kommen aus glasToene: dort ist der Mittelwert schon auf die
+  // Spielerfarbe zurückgerechnet. Wer hier die rohen Töne nähme, bekäme eine
+  // Figur, die mit wachsender Spreizung ins Helle abwandert.
+  const toene = glasToene(color);
+  let nr = 0;
+  for (const b of BEREICHE) {
     g.save();
-    g.clip(sch.p);
-    g.fillStyle = scheibenTon(color, sch);
-    g.fill(MEEPLE_PATH);
-    // Linear, nicht radial. Ein Radialverlauf macht aus jeder Scheibe eine
-    // Kugel – dann steht da eine Plastikfigur mit Bleirahmen. Eine Scheibe
-    // ist flach und wird schräg durchleuchtet: hell an der einen Ecke,
-    // dunkel an der gegenüberliegenden, dazwischen gleichmäßig.
-    const licht = g.createLinearGradient(sch.mx - sch.r, sch.my - sch.r,
-                                         sch.mx + sch.r, sch.my + sch.r);
-    licht.addColorStop(0, `rgba(255,251,235,${staerke.toFixed(3)})`);
-    licht.addColorStop(0.55, `rgba(255,247,222,${(staerke * 0.30).toFixed(3)})`);
-    licht.addColorStop(1, `rgba(28,20,10,${(staerke * 0.34).toFixed(3)})`);
-    g.fillStyle = licht;
-    g.fill(MEEPLE_PATH);
-    // Der Schatten, den die Bleirute auf ihr Glas wirft. Die Hälfte des
-    // Strichs fällt aus der Beschneidung heraus, übrig bleibt eine dünne
-    // dunkle Kante genau innen an der Rute – daran erkennt man, dass die
-    // Scheibe *in* etwas sitzt und nicht aufgemalt ist.
-    g.lineWidth = 3.4;
-    g.strokeStyle = 'rgba(24,17,8,0.22)';
-    g.stroke(sch.p);
+    g.clip(b.pfad);
+    for (const f of b.facetten) {
+      g.fillStyle = toene[nr++];
+      g.fill(f.pfad);
+      // Die Kante zur Nachbarfacette. Ein Schliff hat keine weichen
+      // Übergänge; ohne die Kante verschwimmen zwei Facetten mit ähnlicher
+      // Neigung zu einer Fläche. Auf der Lichtseite blitzt die Kante, auf
+      // der Schattenseite bleibt sie dunkel – so herum sieht man den Grat.
+      const licht = f.winkel === null ? 0 : Math.cos(f.winkel - LICHT);
+      g.lineWidth = 0.45;
+      g.strokeStyle = licht > 0
+        ? `rgba(255,255,255,${(0.10 + licht * 0.30).toFixed(3)})`
+        : `rgba(20,10,0,${(0.08 - licht * 0.16).toFixed(3)})`;
+      g.stroke(f.pfad);
+    }
     g.restore();
   }
 
-  // Schlieren – Kathedralglas ist nie gleichmäßig.
-  for (const s of STREAKS) {
-    g.lineWidth = s.w;
-    g.strokeStyle = `rgba(255,253,244,${s.a})`;
-    g.stroke(s.p);
-  }
+  // Tiefe: hell oben links, dunkel unten rechts. Je dunkler der Stein,
+  // desto mehr braucht er davon – sonst bleibt Schwarz eine Fläche.
+  const staerke = 0.16 + (1 - hell) * 0.26;
+  const tiefe = g.createLinearGradient(14, 4, 92, 100);
+  tiefe.addColorStop(0, `rgba(255,252,240,${staerke.toFixed(3)})`);
+  tiefe.addColorStop(0.42, 'rgba(255,248,228,0)');
+  tiefe.addColorStop(1, `rgba(18,12,4,${(staerke * 0.85).toFixed(3)})`);
+  g.fillStyle = tiefe;
+  g.fill(MEEPLE_PATH);
 
-  // Bleiruten innen, im Schnitt zur Silhouette – sie dürfen nicht
-  // überstehen, sonst sehen sie aus wie angeklebte Striche.
-  g.lineWidth = 4.6;
-  g.strokeStyle = BLEI;
-  g.stroke(CAME);
-  // Die Lötnaht obenauf: ein Blei ist rund, kein flacher Strich.
-  g.lineWidth = 1.1;
-  g.strokeStyle = 'rgba(214,200,172,0.22)';
-  g.save();
-  g.translate(-0.7, -0.8);
-  g.stroke(CAME);
-  g.restore();
-  g.restore();
-
-  // Bleirute außen: die Randfassung. Mittig auf der Silhouette, damit sie
-  // wie überall sonst über die Glaskante greift. Schmal halten – der Arm
-  // ist nur zehn Einheiten dick, und eine Fassung von sechs frisst ihn auf.
-  g.lineWidth = 4.4;
-  g.strokeStyle = BLEI;
+  // Brechungskante: innen an der Silhouette, auf der Lichtseite hell, auf
+  // der Schattenseite als dunkler Saum. Das ist der Rand, an dem ein
+  // durchsichtiger Körper das Licht umlenkt – ohne ihn sieht er aus wie
+  // aufgeklebt.
+  g.lineWidth = 3.2;
+  g.strokeStyle = 'rgba(255,255,255,0.30)';
   g.stroke(MEEPLE_PATH);
+  g.save();
+  g.translate(1.6, 2.0);
+  g.lineWidth = 2.6;
+  g.strokeStyle = 'rgba(24,14,2,0.26)';
+  g.stroke(MEEPLE_PATH);
+  g.restore();
 
-  // Ein einzelner Lichtreflex, schmal und schräg – so, wie eine Glasfläche
-  // eine Fensterkante spiegelt. Vorher stand hier ein breiter Bogen auf dem
-  // Kopf; der machte aus der Kopfscheibe eine Plastikkugel.
+  // Den Saum ausdünnen, solange die Beschneidung noch steht. Mehrere immer
+  // schmalere Striche im Abziehmodus: außen fehlt am meisten Deckung, nach
+  // innen läuft es aus. Ein einzelner Strich gäbe eine harte Stufe, und die
+  // sieht nach Fehler aus statt nach Glas.
+  g.globalCompositeOperation = 'destination-out';
+  const stufen = 6;
+  for (let i = 0; i < stufen; i++) {
+    g.lineWidth = RAND_TIEFE * 2 * (1 - i / stufen);
+    g.strokeStyle = `rgba(0,0,0,${(RAND_ABZUG / stufen).toFixed(3)})`;
+    g.stroke(MEEPLE_PATH);
+  }
+  g.globalCompositeOperation = 'source-over';
+  g.restore();
+
+  // Der Gürtel: ein dünner dunkler Umriss aus der eigenen Farbe, nicht aus
+  // Blei. Er trennt den Stein vom Untergrund, ohne ihn einzurahmen.
+  g.lineWidth = 1.5;
+  g.strokeStyle = shade(color, -0.55);
+  g.globalAlpha = 0.5;
+  g.stroke(MEEPLE_PATH);
+  g.globalAlpha = 1;
+
+  // Funkeln: vierstrahlige Blitze an den Knoten des Schliffs.
   g.save();
   g.clip(MEEPLE_PATH);
-  g.strokeStyle = 'rgba(255,255,255,0.22)';
-  g.lineWidth = 1.7;
-  g.beginPath();
-  g.moveTo(41, 14);
-  g.lineTo(35.5, 26);
-  g.moveTo(25, 55);
-  g.lineTo(17, 64);
-  g.stroke();
+  for (const f of FUNKEN) {
+    const kern = g.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
+    kern.addColorStop(0, `rgba(255,255,255,${f.a})`);
+    kern.addColorStop(0.35, `rgba(255,252,235,${(f.a * 0.35).toFixed(3)})`);
+    kern.addColorStop(1, 'rgba(255,250,225,0)');
+    g.fillStyle = kern;
+    g.beginPath();
+    g.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = `rgba(255,255,255,${(f.a * 0.85).toFixed(3)})`;
+    g.lineWidth = Math.max(0.35, f.r * 0.11);
+    g.lineCap = 'round';
+    const arm = f.r * 1.35;
+    g.beginPath();
+    g.moveTo(f.x - arm, f.y); g.lineTo(f.x + arm, f.y);
+    g.moveTo(f.x, f.y - arm); g.lineTo(f.x, f.y + arm);
+    g.stroke();
+  }
   g.restore();
 
   glasCache.set(color, c);
@@ -275,23 +291,66 @@ function glasFigur(color) {
 export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true } = {}) {
   const s = size * (big ? 1.45 : 1);
 
-  // Kontaktschatten: flache Ellipse direkt unter den Füßen, kein Vollkreis.
-  // Er steht außerhalb der aufgehobenen Figur, weil nicht jeder Aufruf ihn
-  // will – die Auswahlmarken zeichnen ohne.
+  // Unter einem durchscheinenden Stein liegt beides: der farbige Schein des
+  // Lichts, das durch ihn hindurchgeht, und ein kleiner dunkler Kern dort,
+  // wo er aufsitzt. Beides steht außerhalb der aufgehobenen Figur, weil
+  // nicht jeder Aufruf es will – die Auswahlmarken zeichnen ohne.
   if (shadow) {
     ctx.save();
     ctx.translate(x - s / 2, y - s / 2);
     ctx.scale(s / 100, s / 100);
+    const schein = ctx.createRadialGradient(54, 100, 2, 54, 100, 46);
+    schein.addColorStop(0, withAlpha(color, 0.34));
+    schein.addColorStop(0.55, withAlpha(color, 0.13));
+    schein.addColorStop(1, withAlpha(color, 0));
+    ctx.fillStyle = schein;
     ctx.beginPath();
-    ctx.ellipse(52, 99, 30, 11, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(59,46,34,0.30)';
+    ctx.ellipse(54, 100, 46, 17, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(52, 99, 24, 8, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(46,34,22,0.32)';
     ctx.fill();
     ctx.restore();
   }
 
+  // Liegt eine Aufnahme vor, wird sie genommen. Sie ist bereits auf den
+  // Umriss des Spiels eingepasst, deshalb genügt derselbe Kasten mit
+  // anderem Rand – und ein einziger Durchgang: das durchgelassene Licht
+  // steckt schon im Bild, ein zweites multiplizierendes Auflegen würde es
+  // ein zweites Mal einfärben.
+  const foto = figureFor(color);
+  if (foto) {
+    const kf = (FOTO_KASTEN / 100) * s;
+    ctx.drawImage(foto,
+      x - s / 2 - (FOTO_RAND / 100) * s,
+      y - s / 2 - (FOTO_RAND / 100) * s, kf, kf);
+    return;
+  }
+
   const bild = glasFigur(color);
   const k = (GLAS_KASTEN / 100) * s;
-  ctx.drawImage(bild, x - s / 2 - (GLAS_RAND / 100) * s, y - s / 2 - (GLAS_RAND / 100) * s, k, k);
+  const px = x - s / 2 - (GLAS_RAND / 100) * s;
+  const py = y - s / 2 - (GLAS_RAND / 100) * s;
+
+  // Zweimal gezeichnet, und das ist kein Versehen.
+  //
+  // Erst multiplizierend: das ist das Licht, das durch den Stein geht. Durch
+  // einen roten Stein sieht man nicht den grünen Untergrund, sondern rot
+  // gefiltertes Licht – eine Multiplikation, keine Überblendung. Wo der
+  // Stein deckend ist, deckt der zweite Durchgang das ohnehin zu; wo er
+  // dünn ist, bleibt die Färbung stehen.
+  //
+  // Dann normal: das ist das Licht, das die Oberfläche zurückwirft.
+  //
+  // Gemessen über alle Untergründe des Spiels hält das Filtern den Abstand
+  // der Spielerfarben deutlich besser als eine Überblendung – bei 95 %
+  // Deckung ΔE 25,5 gegen 23,8, und die Grenze der Palette liegt bei 25.
+  const vorher = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.drawImage(bild, px, py, k, k);
+  ctx.globalCompositeOperation = vorher;
+  ctx.drawImage(bild, px, py, k, k);
 }
 
 // ---------- Kartengrafik ----------
@@ -401,6 +460,11 @@ loadPaintings();
 // Trifft eine Malerei nachträglich ein, muss die gezeichnete Fassung aus
 // dem Zwischenspeicher – sonst bliebe sie bis zum Neustart stehen.
 onPaintingLoaded((id) => tileCache.dropMotif(id));
+// Die Figuren und die Tischplatte ebenso. Beide stecken in keinem
+// Zwischenspeicher – sie werden bei jedem Bild neu gelegt –, deshalb genügt
+// das Laden.
+loadFigures();
+loadTable();
 
 export function tileVariantAt(x, y) {
   return variantOf(`${x},${y}`);
@@ -1551,13 +1615,21 @@ export class BoardView {
     const candle = candleAt(now, view.calm);
     this.candle = candle;
 
-    // Eichentisch: die Textur wandert mit der Kamera, damit das Brett
-    // wirklich auf dem Tisch zu liegen scheint und nicht darüber schwebt.
-    paintTable(
-      ctx, r.width, r.height,
-      -this.cam.x * this.cam.scale * 0.12,
-      -this.cam.y * this.cam.scale * 0.12,
-    );
+    // Eichentisch. Die Textur ist im Weltkoordinatensystem verankert und
+    // wandert deshalb genau mit den Karten – beim Schieben wie beim Zoomen.
+    //
+    // Hier stand vorher ein Faktor 0,12: der Tisch bewegte sich mit einem
+    // Achtel der Brettgeschwindigkeit. Gemeint war Parallaxe, aber die gibt
+    // es hier nicht zu holen – der Tisch liegt nicht hinter dem Brett,
+    // sondern unmittelbar darunter, in derselben Ebene. Wer eine Karte
+    // schiebt, sieht die Maserung stehenbleiben, und die Karten schwimmen
+    // über dem Tisch statt darauf zu liegen. Genau so gemeldet.
+    //
+    // Der Maßstab hängt an cam.scale, bezogen auf die Ausgangsgröße von
+    // 90 px je Kachel. Ohne das bliebe die Maserung beim Zoomen gleich groß,
+    // und dann rutscht sie doch wieder gegen die Karten.
+    const [tischX, tischY] = this.worldToScreen(0, 0);
+    paintTable(ctx, r.width, r.height, tischX, tischY, this.cam.scale / 90);
     // Wachsglanz auf dem blanken Holz – muss unter die Kacheln, sonst
     // glänzt auch die Pappe.
     paintSheen(ctx, r.width, r.height, candle);
