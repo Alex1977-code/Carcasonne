@@ -159,6 +159,54 @@ Flüsse werden gemessen, aber nicht verschoben: ihre breiten steinernen Ufer
 lassen die Messung um mehr als einen Punkt springen, und ein Versatz daraus
 macht die Karte schlechter statt besser.
 
+## Figuren und Tischplatte: dieselbe Regel, andere Werkzeuge
+
+Für die fotografierten Spielfiguren und die Tischplatte gilt der Ablauf der
+Karten unverändert — erst messen, dann einbauen, danach noch einmal messen:
+
+    node tools/tisch-pruefen.mjs   grafik/tischplatte.png
+    node tools/tisch-einbauen.mjs  grafik/tischplatte.png
+    node tools/figuren-pruefen.mjs grafik/figuren.png --kontakt
+    node tools/figuren-einbauen.mjs grafik/figuren.png
+    node tools/figuren-pruefen.mjs grafik/figuren/*.webp
+
+Vier Dinge aus der ersten Lieferung, die wiederkommen werden:
+
+* **Das Schachbrett ist gemalt.** „Durchsichtiger Hintergrund" kam als
+  RGB-Datei ohne Alphakanal, mit dem Karomuster als Pixel darin (Periode
+  32 px, gemessen). Es ist streng regelmäßig und lässt sich aus dem
+  Bildrand lernen und abziehen; ein fester Weißwert verschluckt die graue
+  Figur.
+* **Der Schatten sperrt die Flutfüllung.** Unter den Figuren liegt ein
+  schwacher Schatten. Wer die Flut schon bei einer Spur Deckung anhalten
+  lässt, bekommt eine Sperre quer durchs Bild, und alles darüber gilt als
+  Loch in der Figur — die Ausschnitte liefen bis zur Bildunterkante. Erst
+  ab halber Deckung sperren.
+* **Die Naht ist die harte Bedingung, nicht das Aussehen.** Die Tischplatte
+  wird gekachelt; aus einer Naht wird ein Linienraster über den ganzen
+  Bildschirm. Gemessen wird nicht absolut, sondern gegen das Grundrauschen
+  der Textur selbst: die Lieferung sprang oben/unten um das 2,5-fache,
+  nach dem Überblenden um das 1,1-fache.
+* **Die gelieferten Farben ersetzen die Palette nicht.** Grün wich um
+  ΔE 40 ab, Violett um 18, und untereinander hielten sie den Abstand
+  nicht mehr: Rot/Grün ΔE 16,7 bei einer Grenze von 25, Grün auf der
+  Wiese 9,2. Übernommen wird deshalb nur das Relief; die Farbe kommt aus
+  PLAYER_PALETTE, und der Mittelwert wird nachgeregelt, bis er sitzt.
+  Danach ist das schwächste Paar Grün/Schwarz mit ΔE 30.
+
+Der Kasten ist eine Verabredung zwischen Werkzeug und Renderer:
+`FOTO_KASTEN` 140 Einheiten, der Umriss (0…100) sitzt darin bei 20…120.
+Der Rand von 20 ist gemessen — die Scheibe ragt um gut ein Achtel der
+Figurenhöhe über die Vorderfläche hinaus, und mit dem Rand 10 der
+gezeichneten Figur wurden die Füße abgeschnitten.
+
+Was das Werkzeug **nicht** kann: aus einem Bild Dicke und Blickwinkel
+trennen. Die sichtbare Seitenwand misst 12,2 % der Höhe; das ist entweder
+eine dünnere Scheibe oder ein flacherer Blick. Und die Überdeckung mit
+`MEEPLE_PATH` (80 %) mischt echte Formabweichung mit der Seitenwand, die
+ein flacher Umriss nie abdeckt. Beides steht deshalb als Anmerkung da,
+nicht als Beanstandung.
+
 ## Neue Bögen einbauen
 
 1. Datei nach `grafik/`

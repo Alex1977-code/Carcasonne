@@ -19,15 +19,20 @@ import { PLAYER_COLORS, PLAYER_COLOR_ALT, mix, deltaE } from './palette.js';
  * Reihenfolge wie bisher im Spiel (rot, blau, gelb, grün, schwarz, violett),
  * damit gespeicherte Spielstände dieselbe Farbe behalten. Grau kommt als
  * siebte Wahl dazu.
+ *
+ * `datei` ist der Name ohne Endung, unter dem die fotografierte Figur unter
+ * grafik/figuren/ liegt. Bewusst ohne Umlaut: der Dateiname läuft über
+ * URL-Kodierung, Dateisystem und Cacheliste des Service Workers, und an
+ * jeder dieser Stellen ist „ü" eine Fehlerquelle mehr.
  */
 export const PLAYER_PALETTE = [
-  { name: 'Rot', hex: PLAYER_COLORS.rot },
-  { name: 'Blau', hex: PLAYER_COLORS.blau },
-  { name: 'Gelb', hex: PLAYER_COLORS.gelb },
-  { name: 'Grün', hex: PLAYER_COLORS.gruen },
-  { name: 'Schwarz', hex: PLAYER_COLORS.schwarz },
-  { name: 'Violett', hex: PLAYER_COLOR_ALT.violett },
-  { name: 'Grau', hex: PLAYER_COLORS.grau },
+  { name: 'Rot', datei: 'rot', hex: PLAYER_COLORS.rot },
+  { name: 'Blau', datei: 'blau', hex: PLAYER_COLORS.blau },
+  { name: 'Gelb', datei: 'gelb', hex: PLAYER_COLORS.gelb },
+  { name: 'Grün', datei: 'gruen', hex: PLAYER_COLORS.gruen },
+  { name: 'Schwarz', datei: 'schwarz', hex: PLAYER_COLORS.schwarz },
+  { name: 'Violett', datei: 'violett', hex: PLAYER_COLOR_ALT.violett },
+  { name: 'Grau', datei: 'grau', hex: PLAYER_COLORS.grau },
 ];
 
 export const PLAYER_HEXES = PLAYER_PALETTE.map((e) => e.hex);

@@ -204,13 +204,39 @@ export function tableTexture(size = 640) {
   return c;
 }
 
+// ------------------------------------------------------ fotografierte Platte
+
+// Liegt grafik/tischplatte.webp vor, wird sie statt der gerechneten Kachel
+// gelegt. Die Datei entsteht mit tools/tisch-einbauen.mjs; dort wird die
+// Naht geheilt, denn das Spiel kachelt die Fläche über den ganzen
+// Bildschirm. Gemessen sprang die Lieferung an der Naht oben/unten um das
+// 2,5-fache des Grundrauschens der Textur – das ergibt ein Linienraster,
+// das man sofort sieht. Nach dem Überblenden sind es 1,1.
+let tableFoto = null;
+let tableGestartet = false;
+
+/** Kantenlänge der Kachel in Weltmaß – unabhängig davon, wie groß die
+ *  Datei ist. Sonst würde die Maserung springen, sobald statt der
+ *  gerechneten 640er Kachel eine 1024er Aufnahme gelegt wird. */
+const KACHEL = 640;
+
+export function loadTable(pfad = 'grafik/tischplatte.webp') {
+  if (tableGestartet || typeof Image === 'undefined') return;
+  tableGestartet = true;
+  const img = new Image();
+  img.decoding = 'async';
+  img.onload = () => { tableFoto = img; };
+  img.onerror = () => {};        // dann bleibt es bei der gerechneten Kachel
+  img.src = pfad;
+}
+
 /**
  * Tischfläche füllen. Die Kachel wird mit `ox`/`oy` verschoben, damit die
  * Fläche mit der Kamera wandert statt am Bildschirm zu kleben.
  */
 export function paintTable(ctx, w, h, ox = 0, oy = 0, scale = 1) {
-  const tile = tableTexture();
-  const step = tile.width * scale;
+  const tile = tableFoto || tableTexture();
+  const step = KACHEL * scale;
   ctx.save();
   ctx.translate(((ox % step) + step) % step - step, ((oy % step) + step) % step - step);
   for (let ty = 0; ty < h + step * 2; ty += step) {

@@ -11,8 +11,9 @@ import { adaptTile } from './render/adapt-tiles.js';
 import { meepleRings } from './render/meeple-colors.js';
 import { KOERPER, facetten, glasToene, LICHT, RAND_TIEFE, RAND_ABZUG } from './render/glass.js';
 import { PALETTE, shade as pshade, withAlpha, mix } from './render/palette.js';
-import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset } from './render/ambience.js';
+import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset, loadTable } from './render/ambience.js';
 import { paintingFor, loadPaintings, onPaintingLoaded } from './render/paintings.js';
+import { figureFor, loadFigures, FOTO_KASTEN, FOTO_RAND } from './render/figures.js';
 import { drawTown } from './render/buildings.js';
 import { drawMonastery, drawCathedral } from './render/landmarks.js';
 import { registerLayer, renderTile } from './render/layers.js';
@@ -313,6 +314,20 @@ export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true 
     ctx.restore();
   }
 
+  // Liegt eine Aufnahme vor, wird sie genommen. Sie ist bereits auf den
+  // Umriss des Spiels eingepasst, deshalb genügt derselbe Kasten mit
+  // anderem Rand – und ein einziger Durchgang: das durchgelassene Licht
+  // steckt schon im Bild, ein zweites multiplizierendes Auflegen würde es
+  // ein zweites Mal einfärben.
+  const foto = figureFor(color);
+  if (foto) {
+    const kf = (FOTO_KASTEN / 100) * s;
+    ctx.drawImage(foto,
+      x - s / 2 - (FOTO_RAND / 100) * s,
+      y - s / 2 - (FOTO_RAND / 100) * s, kf, kf);
+    return;
+  }
+
   const bild = glasFigur(color);
   const k = (GLAS_KASTEN / 100) * s;
   const px = x - s / 2 - (GLAS_RAND / 100) * s;
@@ -445,6 +460,11 @@ loadPaintings();
 // Trifft eine Malerei nachträglich ein, muss die gezeichnete Fassung aus
 // dem Zwischenspeicher – sonst bliebe sie bis zum Neustart stehen.
 onPaintingLoaded((id) => tileCache.dropMotif(id));
+// Die Figuren und die Tischplatte ebenso. Beide stecken in keinem
+// Zwischenspeicher – sie werden bei jedem Bild neu gelegt –, deshalb genügt
+// das Laden.
+loadFigures();
+loadTable();
 
 export function tileVariantAt(x, y) {
   return variantOf(`${x},${y}`);
