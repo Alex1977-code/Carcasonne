@@ -111,6 +111,7 @@ await page.waitForTimeout(300);
 const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
   const { MEEPLE_PATH } = await import('/js/ui/render.js');
   const { PLAYER_PALETTE, MEEPLE_SURFACES } = await import('/js/ui/render/meeple-colors.js');
+  const { FOTO_DECKUNG_MIN, FOTO_SAUM } = await import('/js/ui/render/figures.js');
   const { deltaE, checkPlayerColors, CONTRAST_LIMITS } =
     await import('/js/ui/render/palette.js');
 
@@ -319,6 +320,52 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
       const rgb = [sr / n, sg / n, sb / n].map(Math.round);
       const hex = '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 
+      // ------------------------------------ Kennzahlen für die Durchsicht
+      // Glas ist nicht überall gleich durchsichtig. Wo das Licht von der
+      // Oberfläche zurückkommt – die Glanzlichter –, ist es undurchsichtig;
+      // wo man in das Material hineinsieht, ist es offen. Die Deckung wird
+      // deshalb nicht als eine Zahl aufgetragen, sondern über die eigene
+      // Helligkeit der Figur verteilt:
+      //
+      //   d = DMIN + (1 − DMIN) · g,   g = 0 in den dunklen Flächen,
+      //                                g = 1 im Glanzlicht
+      //
+      // Damit eine schwarze Figur nicht durchweg als „dunkel“ gilt und
+      // verschwindet, wird g je Figur an ihren eigenen Perzentilen
+      // normiert. Dieselben Werte stehen in js/ui/render/figures.js.
+      const P_UNTEN = 0.20, P_OBEN = 0.95;
+      const ys = [];
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const i = at(x, y);
+          if (hatAlpha ? px[i + 3] < 230 : !maske[y * W + x]) continue;
+          ys.push(px[i] * 0.2126 + px[i + 1] * 0.7152 + px[i + 2] * 0.0722);
+        }
+      }
+      ys.sort((a, b) => a - b);
+      const yU = ys[Math.floor(ys.length * P_UNTEN)] || 0;
+      const yO = ys[Math.floor(ys.length * P_OBEN)] || 255;
+      // Zwei Mittelwerte je Kanal genügen, danach ist die ganze Kennlinie
+      // geschlossen ausrechenbar:
+      //   F·d      = DMIN · F(1−g) + F·g
+      //   F·(1−d)  = (1 − DMIN) · F(1−g)
+      const M1 = [0, 0, 0], M2 = [0, 0, 0];
+      let nM = 0;
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const i = at(x, y);
+          if (hatAlpha ? px[i + 3] < 230 : !maske[y * W + x]) continue;
+          const yv = px[i] * 0.2126 + px[i + 1] * 0.7152 + px[i + 2] * 0.0722;
+          const g2 = Math.max(0, Math.min(1, (yv - yU) / Math.max(1, yO - yU)));
+          for (let k = 0; k < 3; k++) {
+            M1[k] += px[i + k] * (1 - g2);
+            M2[k] += px[i + k] * g2;
+          }
+          nM++;
+        }
+      }
+      for (let k = 0; k < 3; k++) { M1[k] /= nM; M2[k] /= nM; }
+
       // ------------------------------------ Vorderfläche einpassen
       // Gesucht ist der größte MEEPLE_PATH, der noch (fast) vollständig in
       // der Silhouette liegt. Kleiner Rest erlaubt, sonst entscheidet ein
@@ -402,7 +449,7 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
       const tiefeAnteil = wand;
       const verhaeltnis = bw / bh;
 
-      figuren.push({ x0, x1, y0, y1, bw, bh, flaeche, rgb, hex,
+      figuren.push({ x0, x1, y0, y1, bw, bh, flaeche, rgb, hex, M1, M2,
         passung, iou, tiefeAnteil,
         verhaeltnis, pfadVerhaeltnis, gepasst: !!enthalten,
         fit: enthalten && { s: enthalten.s, dx: enthalten.dx - RAND, dy: enthalten.dy - RAND },
@@ -528,8 +575,40 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
     return { min, wo };
   };
 
-  const durchsicht = { multiplizieren: [], helligkeit: [] };
+  // Drittes Modell, und das ist das eigentliche: die Deckung wird nicht
+  // gleichmäßig aufgetragen, sondern über die eigene Helligkeit der Figur
+  // verteilt. Glanzlichter bleiben deckend – das ist Licht, das von der
+  // Oberfläche zurückkommt –, die dunklen Flächen öffnen sich, denn dort
+  // sieht man in das Material hinein. Genau so verhält sich Glas.
+  //
+  // Der Vorteil ist messbar: der Farbabstand hängt am Mittelwert, und der
+  // bleibt hoch, solange die Glanzlichter deckend sind. Die Durchsicht
+  // entsteht trotzdem, weil sie sich auf die dunklen Flächen konzentriert,
+  // wo man sie auch sehen will.
+  //
+  // Aus den Kennzahlen je Figur (M1, M2) folgt geschlossen:
+  //   Mittelwert = DMIN·M1 + M2  +  U/255 · (1−DMIN)·M1
+  const figurenAlle = [];
+  out.forEach((m) => m.figuren.forEach((f) => figurenAlle.push(f)));
+  const schwaechstesVerteilt = (dmin) => {
+    let min = Infinity, wo = '';
+    for (const grund of gruende) {
+      const u = zahl(grund);
+      const drauf = {};
+      for (const f of figurenAlle) {
+        drauf[f.soll] = zurueck([0, 1, 2].map((i) =>
+          dmin * f.M1[i] + f.M2[i] + (u[i] / 255) * (1 - dmin) * f.M1[i]));
+      }
+      for (const p of checkPlayerColors(drauf).pairs) {
+        if (p.min < min) { min = p.min; wo = `${p.a}/${p.b} auf ${grund}`; }
+      }
+    }
+    return { min, wo };
+  };
+
+  const durchsicht = { multiplizieren: [], helligkeit: [], verteilt: [] };
   const grenzeD = {};
+  let eingestellt = null;
   if (namenAlle.length >= 2) {
     for (const modus of ['multiplizieren', 'helligkeit']) {
       for (let d = 100; d >= 30; d -= 2) {
@@ -537,6 +616,16 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
         durchsicht[modus].push({ d: d / 100, ...r });
         if (r.min >= CONTRAST_LIMITS.playerPair) grenzeD[modus] = { d: d / 100, ...r };
       }
+    }
+    if (figurenAlle.every((f) => f.M1)) {
+      for (let d = 100; d >= 0; d -= 2) {
+        const r = schwaechstesVerteilt(d / 100);
+        durchsicht.verteilt.push({ d: d / 100, ...r });
+        if (r.min >= CONTRAST_LIMITS.playerPair) grenzeD.verteilt = { d: d / 100, ...r };
+      }
+      // Und was tatsächlich eingestellt ist – nicht nur die Kurve.
+      eingestellt = { d: FOTO_DECKUNG_MIN, ...schwaechstesVerteilt(FOTO_DECKUNG_MIN),
+        saum: FOTO_SAUM };
     }
   }
 
@@ -549,7 +638,7 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
       .map((b) => ({ color: b.color, background: b.background, min: b.min })),
     schwaechste: trennung.pairs.reduce((a, b) => (a.min < b.min ? a : b)),
   };
-  return { out, blatt, zusammen, durchsicht, grenzeD };
+  return { out, blatt, zusammen, durchsicht, grenzeD, eingestellt };
 }, { anzahl: dateien.length, kontakt,
      namen: dateien.map((d) => basename(d).replace(/\.[^.]+$/, '')) });
 
@@ -642,8 +731,10 @@ if (t) {
 
 // Wie weit die Figur durchscheinen darf, ohne dass die Farben zusammenrücken.
 if (ergebnis.durchsicht && ergebnis.durchsicht.multiplizieren.length) {
-  for (const modus of ['multiplizieren', 'helligkeit']) {
-    console.log(`\nDurchsicht (${modus})  Deckung → schwächstes Paar über allen Untergründen`);
+  for (const modus of ['multiplizieren', 'helligkeit', 'verteilt']) {
+    if (!ergebnis.durchsicht[modus] || !ergebnis.durchsicht[modus].length) continue;
+    console.log(`\nDurchsicht (${modus})  ${modus === 'verteilt' ? 'Deckung der dunklen Flächen' : 'Deckung'}`
+      + ' → schwächstes Paar über allen Untergründen');
     for (const z of ergebnis.durchsicht[modus]) {
       if (Math.round(z.d * 100) % 10 !== 0) continue;
       console.log(`          ${(z.d * 100).toFixed(0).padStart(3)} %`
@@ -655,6 +746,16 @@ if (ergebnis.durchsicht && ergebnis.durchsicht.multiplizieren.length) {
       ? `          Grenze: bis ${(g.d * 100).toFixed(0)} % Deckung hält der Abstand`
         + ` (ΔE ${g.min.toFixed(1)} bei ${g.wo}).`
       : '          Schon deckend reicht der Abstand nicht.');
+  }
+  const e = ergebnis.eingestellt;
+  if (e) {
+    console.log(`\nEingestellt  Körper ${(e.d * 100).toFixed(0)} % in den dunklen Flächen`
+      + `   →  schwächstes Paar ΔE ${e.min.toFixed(1)} (${e.wo})`);
+    console.log(e.min >= 25
+      ? '             Die Fläche allein trägt den Abstand noch.'
+      : `             Die Fläche allein trägt den Abstand **nicht** – das ist gewollt.`
+        + ` Erkennbar bleibt die Figur\n             am deckenden Saum`
+        + ` (${e.saum} von 100 Figurenhöhen) in der reinen Spielerfarbe.`);
   }
 }
 

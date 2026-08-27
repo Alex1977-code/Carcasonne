@@ -5,6 +5,11 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  # Von Hand startbar. Ohne das gibt es keinen Weg, die Suiten laufen zu
+  # lassen, wenn der Lauf zum Pull Request einmal nicht angelegt wird –
+  # und dann steht man vor der Wahl, ungeprüft zu übernehmen oder nichts
+  # zu tun. Beides ist falsch.
+  workflow_dispatch:
 
 jobs:
   engine-tests:

@@ -13,7 +13,7 @@ import { KOERPER, facetten, glasToene, LICHT, RAND_TIEFE, RAND_ABZUG } from './r
 import { PALETTE, shade as pshade, withAlpha, mix } from './render/palette.js';
 import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset, loadTable } from './render/ambience.js';
 import { paintingFor, loadPaintings, onPaintingLoaded } from './render/paintings.js';
-import { figureFor, loadFigures, FOTO_KASTEN, FOTO_RAND, FOTO_DECKUNG } from './render/figures.js';
+import { figurTeile, loadFigures, FOTO_KASTEN, FOTO_RAND } from './render/figures.js';
 import { drawTown } from './render/buildings.js';
 import { drawMonastery, drawCathedral } from './render/landmarks.js';
 import { registerLayer, renderTile } from './render/layers.js';
@@ -318,25 +318,34 @@ export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true 
   // Umriss des Spiels eingepasst, deshalb genügt derselbe Kasten mit
   // anderem Rand.
   //
-  // Gezeichnet wird sie wie der geschliffene Stein: erst multiplizierend,
-  // dann normal mit FOTO_DECKUNG. Deckend aufgetragen sah die Figur auf
-  // dem Brett aus wie aufgeklebt – sie hatte mit der Karte darunter nichts
-  // zu tun. Der multiplizierende Durchgang ist das Licht, das durch das
-  // Glas geht: dadurch nimmt die Figur die Helligkeit der Karte an und
-  // liegt in der Szene statt darauf. Wie weit das gehen darf, steht bei
-  // FOTO_DECKUNG – es ist gemessen, nicht geschätzt.
-  const foto = figureFor(color);
-  if (foto) {
+  // Drei Durchgänge, und jeder hat einen eigenen Grund.
+  //
+  // Deckend aufgetragen sah die Figur auf dem Brett aus wie aufgeklebt –
+  // sie hatte mit der Karte darunter nichts zu tun. Also:
+  //
+  //   multiplizierend  das Licht, das durch das Glas geht. Dadurch nimmt
+  //                    die Figur die Helligkeit der Karte an.
+  //   Körper           die Aufnahme mit verteilter Deckung: Glanzlichter
+  //                    bleiben zu, die dunklen Flächen öffnen sich. Dort
+  //                    sieht man das Ornament der Karte hindurch.
+  //   Saum             ein deckender Rand in der Spielerfarbe. Er trägt
+  //                    die Erkennbarkeit, die der offene Körper abgibt.
+  //
+  // Die Zahlen dazu und was gemessen wurde: js/ui/render/figures.js.
+  const teile = figurTeile(color);
+  if (teile) {
     const kf = (FOTO_KASTEN / 100) * s;
     const fx = x - s / 2 - (FOTO_RAND / 100) * s;
     const fy = y - s / 2 - (FOTO_RAND / 100) * s;
     const vorher = ctx.globalCompositeOperation;
+    // Das Licht, das durch das Glas geht – über die ganze Silhouette.
     ctx.globalCompositeOperation = 'multiply';
-    ctx.drawImage(foto, fx, fy, kf, kf);
+    ctx.drawImage(teile.voll, fx, fy, kf, kf);
     ctx.globalCompositeOperation = vorher;
-    ctx.globalAlpha = FOTO_DECKUNG;
-    ctx.drawImage(foto, fx, fy, kf, kf);
-    ctx.globalAlpha = 1;
+    // Der Körper: Glanzlichter deckend, dunkle Flächen offen.
+    ctx.drawImage(teile.koerper, fx, fy, kf, kf);
+    // Der Saum trägt die Farbe, die der Körper abgibt.
+    ctx.drawImage(teile.saum, fx, fy, kf, kf);
     return;
   }
 
