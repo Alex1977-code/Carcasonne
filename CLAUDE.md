@@ -200,6 +200,39 @@ Der Rand von 20 ist gemessen — die Scheibe ragt um gut ein Achtel der
 Figurenhöhe über die Vorderfläche hinaus, und mit dem Rand 10 der
 gezeichneten Figur wurden die Füße abgeschnitten.
 
+### Durchsicht: die Grenze liegt nicht bei der Deckung
+
+„Durchsichtig wie buntes Glas" scheitert an einer Zahl, wenn man es als
+eine Zahl behandelt. Gemessen über jeden Untergrund, für Normalsicht,
+Deuteranopie und Protanopie:
+
+| Modell | Grenze |
+|---|---|
+| gleichmäßige Deckung | 78 % |
+| über die eigene Helligkeit verteilt | 70 % |
+| Untergrundhelligkeit durchlassen, Farbe behalten | 90 % |
+
+Das letzte klingt am physikalischsten und ist das schlechteste — Grün und
+Schwarz unterscheiden sich gerade über die Helligkeit. Und 22 bis 30 %
+Durchsicht sieht man kaum.
+
+Die Grenze kommt immer vom selben Paar, Grün/Rot auf der Wiese. Sie ist
+keine Eigenschaft der Durchsicht, sondern der Frage, **woran man die Figur
+erkennt**. Solange das die Füllfläche ist, deckelt der Farbabstand die
+Durchsicht — beliebig, in jedem Modell.
+
+Deshalb verlagert: Körper auf 45 % in den dunklen Flächen (ΔE 19,7, unter
+der Grenze — gewollt), und ein deckender Saum in der reinen Spielerfarbe
+trägt die Erkennbarkeit. Dessen Paare sind die Paare der Palette selbst.
+Bleiverglasung arbeitet genauso: die Scheibe ist durchsichtig, die Fassung
+trägt die Zeichnung.
+
+Verteilt wird die Deckung über die eigene Helligkeit der Figur — Glanzlicht
+ist Licht von der Oberfläche und dort undurchsichtig, in den dunklen
+Flächen sieht man ins Material. Normiert je Figur an ihren eigenen
+Perzentilen, sonst gilt die schwarze Figur durchweg als dunkel und
+verschwindet.
+
 Was das Werkzeug **nicht** kann: aus einem Bild Dicke und Blickwinkel
 trennen. Die sichtbare Seitenwand misst 12,2 % der Höhe; das ist entweder
 eine dünnere Scheibe oder ein flacherer Blick. Und die Überdeckung mit
