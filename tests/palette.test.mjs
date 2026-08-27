@@ -7,6 +7,7 @@ import {
 } from '../js/ui/render/palette.js';
 import { PLAYER_PALETTE, MEEPLE_SURFACES, meepleRings } from '../js/ui/render/meeple-colors.js';
 import { glasToene, glasMittel, RAND_TIEFE, RAND_ABZUG } from '../js/ui/render/glass.js';
+import { FOTO_DECKUNG } from '../js/ui/render/figures.js';
 
 let failed = 0, passed = 0;
 function ok(cond, msg) {
@@ -168,6 +169,16 @@ function ok(cond, msg) {
   // ist im ersten Entwurf passiert.
   ok(RAND_TIEFE <= 4, `Saum bleibt ein Saum: ${RAND_TIEFE} von 100 Figurenhöhen`);
   ok(RAND_ABZUG <= 0.7, `Saum bleibt nicht ganz durchsichtig: Abzug ${RAND_ABZUG}`);
+
+  // Dasselbe für die fotografierte Figur. Ihre Erscheinung lässt sich hier
+  // nicht nachrechnen – die Bilder sind WebP, und Node hat keinen Decoder.
+  // Gemessen wird sie mit tools/figuren-pruefen.mjs im Browser; dort kam
+  // als Grenze 78 % Deckung heraus (ΔE 25,5 bei Grün/Rot auf der Wiese).
+  // Was hier steht, ist der Riegel dagegen, dass jemand die Durchsicht
+  // später aufdreht, ohne neu zu messen.
+  ok(FOTO_DECKUNG >= 0.78,
+    `Foto-Figur bleibt über der gemessenen Grenze: ${FOTO_DECKUNG} < 0,78`);
+  ok(FOTO_DECKUNG <= 1, `Deckung ist ein Anteil: ${FOTO_DECKUNG}`);
 
   console.log(`  Schliff: größte Abweichung von der Spielerfarbe ΔE ${schlimmste.toFixed(1)} (${wo})`);
   console.log(`  Schliff: schwächstes Paar über allen Untergründen ΔE ${schwaechste.toFixed(1)} (${schwachWo})`);

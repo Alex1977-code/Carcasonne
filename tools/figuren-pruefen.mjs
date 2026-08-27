@@ -110,7 +110,7 @@ await page.waitForTimeout(300);
 
 const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
   const { MEEPLE_PATH } = await import('/js/ui/render.js');
-  const { PLAYER_PALETTE } = await import('/js/ui/render/meeple-colors.js');
+  const { PLAYER_PALETTE, MEEPLE_SURFACES } = await import('/js/ui/render/meeple-colors.js');
   const { deltaE, checkPlayerColors, CONTRAST_LIMITS } =
     await import('/js/ui/render/palette.js');
 
@@ -474,6 +474,72 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
   // alle Dateien zusammen – bei Einzeldateien steht sonst jede für sich.
   const geliefert = {};
   out.forEach((m) => m.figuren.forEach((f) => { geliefert[f.soll] = f.hex; }));
+
+  // ---------------------------------------------- wie durchscheinend darf sie sein
+  // Eine deckende Figur sieht auf dem Brett aus wie aufgeklebt. Sie darf
+  // durchscheinen – aber nicht beliebig weit: was der Untergrund
+  // durchscheinen lässt, färbt **alle** Figuren gleich ein, und damit
+  // rückt jedes Farbpaar zusammen.
+  //
+  // Gerechnet wird genau so, wie der Renderer zeichnet: erst
+  // multiplizierend (das Licht, das durch den Stein geht), dann normal mit
+  // der Deckung d. Für einen deckenden Bildpunkt ergibt das
+  //     R = F · (d + (1−d) · U)
+  // mit Figurfarbe F und Untergrund U. Dieselbe Formel steht in
+  // tests/palette.test.mjs für den gezeichneten Stein.
+  const zahl = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const zurueck = (a) => '#' + a.map((v) => Math.max(0, Math.min(255, Math.round(v)))
+    .toString(16).padStart(2, '0')).join('');
+  const gruende = [...new Set(Object.values(MEEPLE_SURFACES).flat())];
+  const namenAlle = Object.keys(geliefert);
+
+  // Zweites Modell: der Untergrund gibt nur seine **Helligkeit** durch, die
+  // Farbe bleibt die der Figur. Physikalisch ist das der Filter, wie er
+  // wirklich arbeitet – ein rotes Glas lässt rotes Licht durch, wie viel
+  // davon ankommt, hängt davon ab, wie hell es dahinter ist. Im Browser
+  // ist das der Mischmodus 'color'; hier die Rechnung dazu aus der
+  // Compositing-Spezifikation (SetLum mit Beschneidung).
+  const LUM = (c) => 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+  const setLum = (c, l) => {
+    const d = l - LUM(c);
+    let r = [c[0] + d, c[1] + d, c[2] + d];
+    const lum = LUM(r), min = Math.min(...r), max = Math.max(...r);
+    if (min < 0) r = r.map((v) => lum + ((v - lum) * lum) / (lum - min));
+    if (max > 255) r = r.map((v) => lum + ((v - lum) * (255 - lum)) / (max - lum));
+    return r;
+  };
+
+  const schwaechstesBei = (d, modus) => {
+    let min = Infinity, wo = '';
+    for (const grund of gruende) {
+      const drauf = {};
+      const u = zahl(grund);
+      for (const name of namenAlle) {
+        const v = zahl(geliefert[name]);
+        const durch = modus === 'helligkeit'
+          ? setLum(v, LUM(u))                       // Farbe der Figur, Helligkeit des Grundes
+          : [0, 1, 2].map((i) => (v[i] * u[i]) / 255);  // multiplizierend
+        drauf[name] = zurueck([0, 1, 2].map((i) => v[i] * d + durch[i] * (1 - d)));
+      }
+      for (const p of checkPlayerColors(drauf).pairs) {
+        if (p.min < min) { min = p.min; wo = `${p.a}/${p.b} auf ${grund}`; }
+      }
+    }
+    return { min, wo };
+  };
+
+  const durchsicht = { multiplizieren: [], helligkeit: [] };
+  const grenzeD = {};
+  if (namenAlle.length >= 2) {
+    for (const modus of ['multiplizieren', 'helligkeit']) {
+      for (let d = 100; d >= 30; d -= 2) {
+        const r = schwaechstesBei(d / 100, modus);
+        durchsicht[modus].push({ d: d / 100, ...r });
+        if (r.min >= CONTRAST_LIMITS.playerPair) grenzeD[modus] = { d: d / 100, ...r };
+      }
+    }
+  }
+
   const trennung = Object.keys(geliefert).length >= 2 ? checkPlayerColors(geliefert) : null;
   const zusammen = trennung && {
     grenze: CONTRAST_LIMITS.playerPair,
@@ -483,7 +549,7 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
       .map((b) => ({ color: b.color, background: b.background, min: b.min })),
     schwaechste: trennung.pairs.reduce((a, b) => (a.min < b.min ? a : b)),
   };
-  return { out, blatt, zusammen };
+  return { out, blatt, zusammen, durchsicht, grenzeD };
 }, { anzahl: dateien.length, kontakt,
      namen: dateien.map((d) => basename(d).replace(/\.[^.]+$/, '')) });
 
@@ -571,6 +637,24 @@ if (t) {
   for (const b of t.dunkel) {
     fehler++;
     console.log(`          ✗ ${b.color} auf ${b.background} nur ΔE ${b.min.toFixed(1)}`);
+  }
+}
+
+// Wie weit die Figur durchscheinen darf, ohne dass die Farben zusammenrücken.
+if (ergebnis.durchsicht && ergebnis.durchsicht.multiplizieren.length) {
+  for (const modus of ['multiplizieren', 'helligkeit']) {
+    console.log(`\nDurchsicht (${modus})  Deckung → schwächstes Paar über allen Untergründen`);
+    for (const z of ergebnis.durchsicht[modus]) {
+      if (Math.round(z.d * 100) % 10 !== 0) continue;
+      console.log(`          ${(z.d * 100).toFixed(0).padStart(3)} %`
+        + `   ΔE ${z.min.toFixed(1).padStart(5)}   ${z.wo}`
+        + `   ${z.min >= 25 ? '✓' : '✗'}`);
+    }
+    const g = ergebnis.grenzeD[modus];
+    console.log(g
+      ? `          Grenze: bis ${(g.d * 100).toFixed(0)} % Deckung hält der Abstand`
+        + ` (ΔE ${g.min.toFixed(1)} bei ${g.wo}).`
+      : '          Schon deckend reicht der Abstand nicht.');
   }
 }
 
