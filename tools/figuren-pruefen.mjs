@@ -21,19 +21,37 @@
  *   Gleichmaß. Sieben Figuren, die verschieden groß oder verschieden dick
  *   sind, fallen nebeneinander auf dem Brett sofort auf.
  *
- *   Dicke. Aus dem Überschuss über die eingepasste Vorderfläche folgt die
- *   sichtbare Tiefe der Scheibe. Sie ist nicht die Dicke selbst, sondern
- *   deren Projektion: eine H/2 dicke Scheibe zeigt bei frontalem Blick gar
- *   keine Seitenwand. Deshalb wird der Blickwinkel angegeben, der zur
- *   gemessenen Projektion gehören müsste – aus einem Bild allein lässt
- *   sich Dicke und Blickwinkel nicht trennen.
+ *   Dicke. Die Breite der Schnittfläche, gemessen als Bildmerkmal: je
+ *   Zeile die stärkste Helligkeitskante im Inneren, von rechts her. Sie
+ *   ist nicht die Dicke selbst, sondern deren Projektion – eine H/2 dicke
+ *   Scheibe zeigt bei frontalem Blick gar keine Seitenwand. Deshalb steht
+ *   der Blickwinkel dabei, der zur gemessenen Projektion gehören müsste;
+ *   aus einem Bild allein lässt sich beides nicht trennen.
+ *
+ *   Geeicht an zwei gerechneten Scheiben mit bekannter Tiefe:
+ *   26,6 % → 26,7 % gemessen, 12,8 % → 13,1 %.
+ *
+ * Zwei Verfahren, die vorher hier standen und die nicht taugen – damit sie
+ * niemand noch einmal versucht:
+ *
+ *   Fläche über der eingepassten Vorderfläche. Setzt voraus, dass die
+ *   Silhouette zu MEEPLE_PATH passt. Tut sie das nicht, wandert die
+ *   Formabweichung in die Tiefe; bei zwei der sieben Figuren fand die
+ *   Einpassung überhaupt keine Lage.
+ *
+ *   Morphologische Öffnung. Mathematisch sauber – die Silhouette einer
+ *   Scheibe ist eine Minkowski-Summe mit einer Strecke, und die längste
+ *   Strecke, mit der sie sich verlustfrei öffnen lässt, ist die Tiefe.
+ *   Nur ist ein Foto kein ideales Prisma: verrundete Schnittkante,
+ *   perspektivisch kleinere Rückfläche. Mit enger Toleranz kam an beiden
+ *   Lieferungen 0 % heraus, mit weiter an einer gerechneten Scheibe
+ *   42,7 % statt 26,6 %.
  *
  * Die Überdeckung mit MEEPLE_PATH steht als **Anmerkung** dabei, nicht als
- * Beanstandung. Sie mischt zwei Ursachen, die das Werkzeug nicht trennen
- * kann – eine andere Silhouette und die Seitenwand der Scheibe, die ein
- * flacher Umriss nie abdeckt. Ein Versuch, die Seitenwand herauszurechnen,
- * machte die Zahl schlechter statt besser (siehe unten). Wer die Form
- * beurteilen will, nimmt --kontakt und sieht sich den Umriss an.
+ * Beanstandung. Sie mischt echte Formabweichung mit der Seitenwand, die
+ * ein flacher Umriss nie abdeckt. Wer die Form beurteilen will, nimmt
+ * --kontakt und sieht sich den Umriss an; die harte Zahl dazu ist das
+ * Verhältnis Breite zu Höhe neben dem des Spielumrisses.
  *
  * Beanstandungen gehen mit Rückgabewert 1 raus.
  */
@@ -92,9 +110,83 @@ await page.waitForTimeout(300);
 
 const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
   const { MEEPLE_PATH } = await import('/js/ui/render.js');
-  const { PLAYER_PALETTE } = await import('/js/ui/render/meeple-colors.js');
+  const { PLAYER_PALETTE, MEEPLE_SURFACES } = await import('/js/ui/render/meeple-colors.js');
   const { deltaE, checkPlayerColors, CONTRAST_LIMITS } =
     await import('/js/ui/render/palette.js');
+
+  // Maße des Spielumrisses – gebraucht für den Vergleich der Proportion.
+  const mc = document.createElement('canvas');
+  mc.width = mc.height = 440;
+  const mg = mc.getContext('2d', { willReadFrequently: true });
+  mg.setTransform(4, 0, 0, 4, 20, 20);
+  mg.fillStyle = '#000';
+  mg.fill(MEEPLE_PATH);
+  const md = mg.getImageData(0, 0, 440, 440).data;
+  let mx0 = 440, mx1 = -1, my0 = 440, my1 = -1;
+  for (let y = 0; y < 440; y++) {
+    for (let x = 0; x < 440; x++) {
+      if (md[((y * 440 + x) << 2) + 3] < 128) continue;
+      if (x < mx0) mx0 = x;
+      if (x > mx1) mx1 = x;
+      if (y < my0) my0 = y;
+      if (y > my1) my1 = y;
+    }
+  }
+  const pfadVerhaeltnis = (mx1 - mx0 + 1) / (my1 - my0 + 1);
+
+  /**
+   * Die Schnittfläche als Bildmerkmal messen.
+   *
+   * Die Öffnungsmessung darunter ist mathematisch sauber, aber nur für ein
+   * ideales Prisma. Ein Foto ist keines: die Schnittkante ist verrundet,
+   * die Rückfläche steht perspektivisch etwas kleiner als die Vorderfläche.
+   * Mit enger Toleranz meldete sie deshalb an beiden Lieferungen 0 %, mit
+   * weiter Toleranz an einer gerechneten Scheibe 42,7 % statt 26,6 %. Für
+   * Fotos taugt sie nicht.
+   *
+   * Was in einem Foto dagegen wirklich dasteht: die Schnittfläche ist eine
+   * eigene Fläche mit eigener Helligkeit – man blickt entlang des
+   * Materials, deshalb ist sie satter und meist dunkler als die
+   * Vorderfläche. Zwischen beiden liegt eine Kante. Gesucht wird also je
+   * Zeile von rechts her die stärkste Helligkeitskante im Inneren; der
+   * Abstand von dort zum Rand ist die Breite der Schnittfläche.
+   */
+  const wandMessen = (px, maske, W, H, x0, y0, bw, bh) => {
+    const lum = (x, y) => {
+      const i = ((y * W + x) << 2);
+      return px[i] * 0.2126 + px[i + 1] * 0.7152 + px[i + 2] * 0.0722;
+    };
+    const breiten = [];
+    // Nur der Rumpf. Kopf und Beine sind schmal, dort liegt die Kante zu
+    // dicht am Rand, und die Arme haben eigene Rundungen.
+    for (let y = Math.round(y0 + bh * 0.34); y < y0 + bh * 0.60; y += 2) {
+      let xr = -1;
+      for (let x = x0 + bw - 1; x >= x0; x--) if (maske[y * W + x]) { xr = x; break; }
+      if (xr < 0) continue;
+      const tief = Math.round(bw * 0.45);
+      let bestX = -1, bestG = 0;
+      // Drei Pixel weit glätten, sonst gewinnt das Rauschen.
+      const gl = (x) => (lum(x - 1, y) + lum(x, y) + lum(x + 1, y)) / 3;
+      // Erst ab sechs Pixel Abstand suchen und nur, solange das ganze
+      // Fenster in der Figur liegt. Sonst gewinnt immer die Außenkante:
+      // dort steht der weiße Grund daneben, und kein Übergang im Inneren
+      // kommt gegen diesen Sprung an. Genau daran ist der erste Versuch
+      // gescheitert – er meldete an einer gerechneten Scheibe mit 26,6 %
+      // Sollwert ganze 0,8 %, immer den ersten möglichen Abstand.
+      for (let d = 6; d < tief; d++) {
+        const x = xr - d;
+        if (x - 3 <= x0 || !maske[y * W + x - 3] || !maske[y * W + x + 3]) break;
+        const g = Math.abs(gl(x + 3) - gl(x - 3));
+        if (g > bestG) { bestG = g; bestX = x; }
+      }
+      // Ohne deutliche Kante gibt es nichts zu melden.
+      if (bestX < 0 || bestG < 8) continue;
+      breiten.push(xr - bestX);
+    }
+    if (breiten.length < 4) return 0;
+    breiten.sort((a, b) => a - b);
+    return breiten[breiten.length >> 1] / bh;
+  };
 
   const out = [];
   let blatt = null;
@@ -286,6 +378,7 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
       }
 
       const passung = enthalten ? enthalten.innen / flaeche : 0;   // Anteil der Silhouette
+      const wand = wandMessen(px, maske, W, H, x0, y0, bw, bh);
 
       // ------------------------------------ Form
       // Die Überdeckung mit MEEPLE_PATH ist bewusst **keine** Beanstandung.
@@ -306,12 +399,12 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
       // Überschuss = Silhouette minus Vorderfläche. Beim Verschieben einer
       // Fläche um eine Strecke wächst sie um Strecke × Höhe – daraus die
       // sichtbare Tiefe der Scheibe.
-      const ueberschuss = enthalten ? flaeche - enthalten.innen : 0;
-      const tiefe = enthalten ? ueberschuss / bh : 0;
-      const tiefeAnteil = tiefe / bh;
+      const tiefeAnteil = wand;
+      const verhaeltnis = bw / bh;
 
       figuren.push({ x0, x1, y0, y1, bw, bh, flaeche, rgb, hex,
-        passung, iou, ueberschuss, tiefe, tiefeAnteil,
+        passung, iou, tiefeAnteil,
+        verhaeltnis, pfadVerhaeltnis, gepasst: !!enthalten,
         fit: enthalten && { s: enthalten.s, dx: enthalten.dx - RAND, dy: enthalten.dy - RAND },
         fitIou: deckung && { s: deckung.s, dx: deckung.dx - RAND, dy: deckung.dy - RAND } });
     }
@@ -363,7 +456,14 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
       blatt = kc.toDataURL('image/png');
     }
 
-    out.push({ W, H, hatAlpha, alphaMin, periode, figuren });
+    const werte = [...felder.values()].map((e) => [e.r / e.n, e.g / e.n, e.b / e.n]);
+    const spanneGrund = Math.max(...werte.map((v, i) =>
+      Math.max(...werte.map((w) => Math.max(...v.map((c, k) => Math.abs(c - w[k])))))));
+    const mittelGrund = [0, 1, 2].map((k) =>
+      Math.round(werte.reduce((a, v) => a + v[k], 0) / werte.length));
+    out.push({ W, H, hatAlpha, alphaMin, periode, figuren,
+      gemustert: spanneGrund > 3,
+      grundHex: '#' + mittelGrund.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase() });
   }
 
   // ---------------------------------------------- Trennung untereinander
@@ -374,6 +474,72 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
   // alle Dateien zusammen – bei Einzeldateien steht sonst jede für sich.
   const geliefert = {};
   out.forEach((m) => m.figuren.forEach((f) => { geliefert[f.soll] = f.hex; }));
+
+  // ---------------------------------------------- wie durchscheinend darf sie sein
+  // Eine deckende Figur sieht auf dem Brett aus wie aufgeklebt. Sie darf
+  // durchscheinen – aber nicht beliebig weit: was der Untergrund
+  // durchscheinen lässt, färbt **alle** Figuren gleich ein, und damit
+  // rückt jedes Farbpaar zusammen.
+  //
+  // Gerechnet wird genau so, wie der Renderer zeichnet: erst
+  // multiplizierend (das Licht, das durch den Stein geht), dann normal mit
+  // der Deckung d. Für einen deckenden Bildpunkt ergibt das
+  //     R = F · (d + (1−d) · U)
+  // mit Figurfarbe F und Untergrund U. Dieselbe Formel steht in
+  // tests/palette.test.mjs für den gezeichneten Stein.
+  const zahl = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const zurueck = (a) => '#' + a.map((v) => Math.max(0, Math.min(255, Math.round(v)))
+    .toString(16).padStart(2, '0')).join('');
+  const gruende = [...new Set(Object.values(MEEPLE_SURFACES).flat())];
+  const namenAlle = Object.keys(geliefert);
+
+  // Zweites Modell: der Untergrund gibt nur seine **Helligkeit** durch, die
+  // Farbe bleibt die der Figur. Physikalisch ist das der Filter, wie er
+  // wirklich arbeitet – ein rotes Glas lässt rotes Licht durch, wie viel
+  // davon ankommt, hängt davon ab, wie hell es dahinter ist. Im Browser
+  // ist das der Mischmodus 'color'; hier die Rechnung dazu aus der
+  // Compositing-Spezifikation (SetLum mit Beschneidung).
+  const LUM = (c) => 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+  const setLum = (c, l) => {
+    const d = l - LUM(c);
+    let r = [c[0] + d, c[1] + d, c[2] + d];
+    const lum = LUM(r), min = Math.min(...r), max = Math.max(...r);
+    if (min < 0) r = r.map((v) => lum + ((v - lum) * lum) / (lum - min));
+    if (max > 255) r = r.map((v) => lum + ((v - lum) * (255 - lum)) / (max - lum));
+    return r;
+  };
+
+  const schwaechstesBei = (d, modus) => {
+    let min = Infinity, wo = '';
+    for (const grund of gruende) {
+      const drauf = {};
+      const u = zahl(grund);
+      for (const name of namenAlle) {
+        const v = zahl(geliefert[name]);
+        const durch = modus === 'helligkeit'
+          ? setLum(v, LUM(u))                       // Farbe der Figur, Helligkeit des Grundes
+          : [0, 1, 2].map((i) => (v[i] * u[i]) / 255);  // multiplizierend
+        drauf[name] = zurueck([0, 1, 2].map((i) => v[i] * d + durch[i] * (1 - d)));
+      }
+      for (const p of checkPlayerColors(drauf).pairs) {
+        if (p.min < min) { min = p.min; wo = `${p.a}/${p.b} auf ${grund}`; }
+      }
+    }
+    return { min, wo };
+  };
+
+  const durchsicht = { multiplizieren: [], helligkeit: [] };
+  const grenzeD = {};
+  if (namenAlle.length >= 2) {
+    for (const modus of ['multiplizieren', 'helligkeit']) {
+      for (let d = 100; d >= 30; d -= 2) {
+        const r = schwaechstesBei(d / 100, modus);
+        durchsicht[modus].push({ d: d / 100, ...r });
+        if (r.min >= CONTRAST_LIMITS.playerPair) grenzeD[modus] = { d: d / 100, ...r };
+      }
+    }
+  }
+
   const trennung = Object.keys(geliefert).length >= 2 ? checkPlayerColors(geliefert) : null;
   const zusammen = trennung && {
     grenze: CONTRAST_LIMITS.playerPair,
@@ -383,7 +549,7 @@ const ergebnis = await page.evaluate(async ({ anzahl, kontakt, namen }) => {
       .map((b) => ({ color: b.color, background: b.background, min: b.min })),
     schwaechste: trennung.pairs.reduce((a, b) => (a.min < b.min ? a : b)),
   };
-  return { out, blatt, zusammen };
+  return { out, blatt, zusammen, durchsicht, grenzeD };
 }, { anzahl: dateien.length, kontakt,
      namen: dateien.map((d) => basename(d).replace(/\.[^.]+$/, '')) });
 
@@ -404,8 +570,14 @@ for (let i = 0; i < dateien.length; i++) {
   console.log(`\n${basename(dateien[i])}   ${m.W}×${m.H}   ${m.figuren.length} Figuren`);
   if (!m.hatAlpha) {
     fehler++;
-    console.log(`   Alphakanal  fehlt – Hintergrund ist ins Bild gemalt`
-      + ` (Schachbrett, Periode ${m.periode} px)   ✗ muss freigestellt werden`);
+    // Ein einfarbiger Grund ist leicht zu entfernen, ein gemaltes
+    // Schachbrett braucht das gelernte Muster. Unterschieden wird daran,
+    // ob sich die vier gelernten Felder überhaupt unterscheiden – bei
+    // einfarbigem Grund findet die Periodensuche irgendeinen Wert, und der
+    // sagt dann nichts.
+    console.log(`   Alphakanal  fehlt – ${m.gemustert
+      ? `Hintergrund ist ins Bild gemalt (Schachbrett, Periode ${m.periode} px)`
+      : `Grund ist einfarbig ${m.grundHex}`}   ✗ muss freigestellt werden`);
   } else {
     console.log(`   Alphakanal  vorhanden (min ${m.alphaMin})   ✓`);
   }
@@ -416,11 +588,14 @@ for (let i = 0; i < dateien.length; i++) {
       + `   ${f.hex}  soll ${f.sollHex}  ΔE ${f.dE.toFixed(1).padStart(5)}`
       + `   ${f.dE <= 12 ? '✓' : `✗ ΔE zu groß (nächste: ${f.naechste.name})`}`);
     if (f.dE > 12) fehler++;
-    const p = (f.passung * 100).toFixed(0);
     const t = (f.tiefeAnteil * 100).toFixed(1);
     const iou = (f.iou * 100).toFixed(0);
+    console.log(`             Seitenwand ${t.padStart(5)} % der Höhe`
+      + `   Breite/Höhe ${f.verhaeltnis.toFixed(2)}`
+      + ` gegen ${f.pfadVerhaeltnis.toFixed(2)} beim Spielumriss`);
     console.log(`             Form ${iou.padStart(3)} % Überdeckung mit MEEPLE_PATH`
-      + `   Vorderfläche ${p.padStart(3)} %   Seitenwand ${t.padStart(5)} % der Höhe`
+      + (f.gepasst ? `   Vorderfläche ${(f.passung * 100).toFixed(0)} %`
+                   : '   Vorderfläche liess sich nicht einpassen')
       + `   ${f.iou >= 0.85 ? '' : '– Umriss ansehen'}`);
   }
 
@@ -462,6 +637,24 @@ if (t) {
   for (const b of t.dunkel) {
     fehler++;
     console.log(`          ✗ ${b.color} auf ${b.background} nur ΔE ${b.min.toFixed(1)}`);
+  }
+}
+
+// Wie weit die Figur durchscheinen darf, ohne dass die Farben zusammenrücken.
+if (ergebnis.durchsicht && ergebnis.durchsicht.multiplizieren.length) {
+  for (const modus of ['multiplizieren', 'helligkeit']) {
+    console.log(`\nDurchsicht (${modus})  Deckung → schwächstes Paar über allen Untergründen`);
+    for (const z of ergebnis.durchsicht[modus]) {
+      if (Math.round(z.d * 100) % 10 !== 0) continue;
+      console.log(`          ${(z.d * 100).toFixed(0).padStart(3)} %`
+        + `   ΔE ${z.min.toFixed(1).padStart(5)}   ${z.wo}`
+        + `   ${z.min >= 25 ? '✓' : '✗'}`);
+    }
+    const g = ergebnis.grenzeD[modus];
+    console.log(g
+      ? `          Grenze: bis ${(g.d * 100).toFixed(0)} % Deckung hält der Abstand`
+        + ` (ΔE ${g.min.toFixed(1)} bei ${g.wo}).`
+      : '          Schon deckend reicht der Abstand nicht.');
   }
 }
 

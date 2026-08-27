@@ -13,7 +13,7 @@ import { KOERPER, facetten, glasToene, LICHT, RAND_TIEFE, RAND_ABZUG } from './r
 import { PALETTE, shade as pshade, withAlpha, mix } from './render/palette.js';
 import { candleAt, paintTable, paintSheen, paintCandleLight, shadowOffset, loadTable } from './render/ambience.js';
 import { paintingFor, loadPaintings, onPaintingLoaded } from './render/paintings.js';
-import { figureFor, loadFigures, FOTO_KASTEN, FOTO_RAND } from './render/figures.js';
+import { figureFor, loadFigures, FOTO_KASTEN, FOTO_RAND, FOTO_DECKUNG } from './render/figures.js';
 import { drawTown } from './render/buildings.js';
 import { drawMonastery, drawCathedral } from './render/landmarks.js';
 import { registerLayer, renderTile } from './render/layers.js';
@@ -316,15 +316,27 @@ export function drawMeeple(ctx, x, y, size, color, { big = false, shadow = true 
 
   // Liegt eine Aufnahme vor, wird sie genommen. Sie ist bereits auf den
   // Umriss des Spiels eingepasst, deshalb genügt derselbe Kasten mit
-  // anderem Rand – und ein einziger Durchgang: das durchgelassene Licht
-  // steckt schon im Bild, ein zweites multiplizierendes Auflegen würde es
-  // ein zweites Mal einfärben.
+  // anderem Rand.
+  //
+  // Gezeichnet wird sie wie der geschliffene Stein: erst multiplizierend,
+  // dann normal mit FOTO_DECKUNG. Deckend aufgetragen sah die Figur auf
+  // dem Brett aus wie aufgeklebt – sie hatte mit der Karte darunter nichts
+  // zu tun. Der multiplizierende Durchgang ist das Licht, das durch das
+  // Glas geht: dadurch nimmt die Figur die Helligkeit der Karte an und
+  // liegt in der Szene statt darauf. Wie weit das gehen darf, steht bei
+  // FOTO_DECKUNG – es ist gemessen, nicht geschätzt.
   const foto = figureFor(color);
   if (foto) {
     const kf = (FOTO_KASTEN / 100) * s;
-    ctx.drawImage(foto,
-      x - s / 2 - (FOTO_RAND / 100) * s,
-      y - s / 2 - (FOTO_RAND / 100) * s, kf, kf);
+    const fx = x - s / 2 - (FOTO_RAND / 100) * s;
+    const fy = y - s / 2 - (FOTO_RAND / 100) * s;
+    const vorher = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(foto, fx, fy, kf, kf);
+    ctx.globalCompositeOperation = vorher;
+    ctx.globalAlpha = FOTO_DECKUNG;
+    ctx.drawImage(foto, fx, fy, kf, kf);
+    ctx.globalAlpha = 1;
     return;
   }
 
