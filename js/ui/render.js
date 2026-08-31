@@ -1794,6 +1794,38 @@ export class BoardView {
     // Kacheln im Licht liegen und die Ränder wirklich dunkel werden.
     paintCandleLight(ctx, r.width, r.height, candle);
 
+    // Welches Gebiet gerade gewertet wurde. Ein Rahmen um genau die
+    // Karten, für die es Punkte gab – ohne den ist am Brett nicht zu
+    // erkennen, welche von mehreren Städten gemeint war, und eine
+    // richtige Wertung sieht aus wie ein Fehler.
+    if (view.wertungen) {
+      for (const w of view.wertungen) {
+        const age = (now - w.t0) / 2500;
+        if (age > 1) continue;
+        // Leicht pulsierend, aber nie fast weg. Ein Puls, der bis auf ein
+        // Zehntel abfällt, ist im falschen Moment gar nicht da – und genau
+        // dann sieht man wieder nicht, welches Gebiet gemeint war.
+        const puls = 0.82 + 0.18 * Math.cos(age * Math.PI * 4);
+        ctx.globalAlpha = (1 - age * age) * puls;
+        ctx.lineJoin = 'round';
+        // Zweimal: erst ein dunkler Saum, dann die Spielerfarbe. Auf der
+        // gemalten Karte ist eine einzelne farbige Linie nicht zu finden –
+        // dort liegt schon Gold, Grün und Rot nebeneinander.
+        for (const [farbe, breite] of [['rgba(20,14,8,0.85)', 0.085], [w.color, 0.045]]) {
+          ctx.strokeStyle = farbe;
+          ctx.lineWidth = Math.max(2, s * breite);
+          for (const k of w.felder) {
+            const [kx, ky] = k.split(',').map(Number);
+            const [sx, sy] = this.worldToScreen(kx, ky);
+            const d = ctx.lineWidth / 2;
+            this.rounded(ctx, sx - s / 2 + d, sy - s / 2 + d, s - 2 * d, s - 2 * d, s * 0.06);
+            ctx.stroke();
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
     // Punkte-Floater
     if (view.floaters) {
       for (const f of view.floaters) {

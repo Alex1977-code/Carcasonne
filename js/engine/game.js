@@ -350,6 +350,10 @@ function scoreFeature(s, rootId, complete, category) {
   s.events.push({
     type: 'score', ftype: data.t, points: pts, players: winners,
     complete, x: c.x, y: c.y, tiles: data.tiles.size,
+    // Welche Karten gewertet wurden. Ohne das ist am Brett nicht zu
+    // erkennen, *welches* Gebiet gemeint war – bei zwei Städten
+    // nebeneinander sieht eine richtige Wertung dann aus wie ein Fehler.
+    felder: [...data.tiles],
   });
   returnMeeples(s, data);
 }
@@ -378,7 +382,16 @@ function scoreMonastery(s, monSegId, complete) {
   const owner = data.meeples[0].pl;
   s.players[owner].score += n;
   s.players[owner].breakdown.mon += n;
-  s.events.push({ type: 'score', ftype: 'mon', points: n, players: [owner], complete: n >= 9, x: p.x, y: p.y, tiles: n });
+  // Gewertet wird der Hof samt Nachbarschaft – deshalb die ganzen 3×3.
+  const felder = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const k = key(p.x + dx, p.y + dy);
+      if (s.grid.has(k)) felder.push(k);
+    }
+  }
+  s.events.push({ type: 'score', ftype: 'mon', points: n, players: [owner],
+    complete: n >= 9, x: p.x, y: p.y, tiles: n, felder });
   returnMeeples(s, data);
 }
 

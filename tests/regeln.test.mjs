@@ -1031,6 +1031,112 @@ console.log('=== 20. Jeder angebotene Punkt muss auch antippbar sein ===');
   console.log(`   ${gezogen} Züge, ${gemeldet} besetzte Gebiete – jedes Gebiet ist benannt`);
 }
 
+// ---------------------------------------------------------------------------
+// Gewertet wird nur, was geschlossen ist
+//
+// Gemeldet: „es wurden Punkte einer Stadt gezählt, obwohl nur erweitert
+// wurde." Nachgeprüft wird das nicht gegen `data.open` – das ist die
+// Buchführung, um die es geht –, sondern gegen die Geometrie: für jede
+// Karte des Gebiets und jede ihrer Stadt- bzw. Straßenkanten muss ein
+// Nachbar liegen. Zusätzlich wird das geführte Gebiet mit dem verglichen,
+// das sich durch Ablaufen der Kanten ergibt: Kachelzahl und Wappen.
+//
+// Der gemeldete Fall trat dabei nicht auf. Die Prüfung bleibt trotzdem
+// stehen – ein Verdacht, den man einmal ausgeräumt hat, kommt sonst beim
+// nächsten Mal ungeprüft wieder.
+{
+  const offeneKanten = (s, wurzel, typ) => {
+    const offen = [];
+    for (const p of s.placed) {
+      for (let dir = 0; dir < 4; dir++) {
+        const seg = p.edgeSeg[dir];
+        if (seg < 0 || s.segs[seg].t !== typ) continue;
+        if (find(s, seg) !== wurzel) continue;
+        const nk = key(p.x + DIRS[dir].dx, p.y + DIRS[dir].dy);
+        if (!s.grid.has(nk)) offen.push(`${p.x},${p.y}:${dir}`);
+      }
+    }
+    return offen;
+  };
+
+  // Das Gebiet unabhängig nachbauen, allein über die Nachbarschaft.
+  const gebietVon = (s, startSeg) => {
+    const gesehen = new Set([startSeg]);
+    const stapel = [startSeg];
+    const kacheln = new Set();
+    let wappen = 0;
+    while (stapel.length) {
+      const seg = stapel.pop();
+      const { p: pIdx, fi } = s.segs[seg];
+      const p = s.placed[pIdx];
+      kacheln.add(p.key);
+      const f = DEFS[p.defId].f[fi];
+      wappen += f.shield || 0;
+      for (const e of f.e) {
+        const we = (e + p.rot) % 4;
+        const nIdx = s.grid.get(key(p.x + DIRS[we].dx, p.y + DIRS[we].dy));
+        if (nIdx === undefined) continue;
+        const nachbar = s.placed[nIdx].edgeSeg[opp(we)];
+        if (nachbar >= 0 && !gesehen.has(nachbar)) { gesehen.add(nachbar); stapel.push(nachbar); }
+      }
+    }
+    return { kacheln, wappen };
+  };
+
+  let wertungen = 0, offenGewertet = 0, falschGross = 0, falschWappen = 0, restImSpiel = 0;
+  for (let seed = 0; seed < 20; seed++) {
+    const s = newGame(festerStapel({
+      players: [
+        { name: 'A', color: '#D6321A', type: 'ai1' },
+        { name: 'B', color: '#196CCD', type: 'ai1' },
+      ],
+      expansions: { inns: seed % 2 === 0, king: seed % 3 === 0, river: seed % 4 === 0 },
+      deckScale: 1,
+    }, seed));
+    let schritte = 0;
+    while (s.phase !== 'over' && schritte++ < 400) {
+      if (s.phase === 'place') {
+        const stellen = legalPlacementsFor(s, s.drawn);
+        if (!stellen.length) break;
+        const st = stellen[(seed * 7 + schritte * 13) % stellen.length];
+        placeCurrent(s, st.x, st.y, st.rots[schritte % st.rots.length]);
+      }
+      const opts = meepleOptions(s);
+      const nimm = opts.length && (seed + schritte) % 2 === 0 ? opts[schritte % opts.length] : null;
+      const ev = finishTurn(s, nimm ? { fi: nimm.fi, big: s.players[s.current].meeples <= 0 } : null);
+
+      // Mitten im Spiel darf es keine Restwertung geben – die gehört ans Ende.
+      if (s.phase !== 'over') {
+        for (const e of ev) if (e.type === 'score' && !e.complete) restImSpiel++;
+      }
+
+      for (const [wurzel, data] of s.roots) {
+        if (data.t !== 'city' && data.t !== 'road') continue;
+        if (find(s, wurzel) !== wurzel) continue;
+        if (data.scored && data.complete) {
+          wertungen++;
+          if (offeneKanten(s, wurzel, data.t).length) offenGewertet++;
+        }
+      }
+      // Und die Buchführung gegen die Geometrie.
+      for (let seg = 0; seg < s.segs.length; seg++) {
+        if (s.segs[seg].t !== 'city') continue;
+        const data = s.roots.get(find(s, seg));
+        if (!data) continue;
+        const echt = gebietVon(s, seg);
+        if (echt.kacheln.size !== data.tiles.size) falschGross++;
+        if (echt.wappen !== data.shields) falschWappen++;
+      }
+    }
+  }
+  ok(wertungen >= 100, `genug abgeschlossene Gebiete geprüft (waren ${wertungen})`);
+  eq(offenGewertet, 0, 'kein Gebiet wurde als vollständig gewertet, das noch eine offene Kante hat');
+  eq(falschGross, 0, 'die geführte Kachelzahl stimmt mit der Geometrie überein');
+  eq(falschWappen, 0, 'die geführten Wappen stimmen mit der Geometrie überein');
+  eq(restImSpiel, 0, 'mitten im Spiel gibt es keine Restwertung');
+  console.log(`   ${wertungen} abgeschlossene Gebiete gegen die Geometrie geprüft`);
+}
+
 console.log(`\n${passed} Prüfungen bestanden, ${failed} fehlgeschlagen.`);
 if (failed) {
   console.log('\nOffene Punkte:');
