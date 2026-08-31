@@ -609,6 +609,7 @@ function startGameUI(state) {
     meeple: null,          // Meeple-Optionen (Phase 'meeple')
     bigNext: false,
     floaters: [],
+    wertungen: [],
     anim: null,
     lastPlaced: state.lastPlacedIdx,
     aiBusy: false,
@@ -714,12 +715,14 @@ function startLoop() {
       meepleSpots: ui.meeple ? ui.meeple.spots : null,
       meepleBesetzt: ui.meeple ? ui.meeple.besetzt : null,
       floaters: ui.floaters,
+      wertungen: ui.wertungen,
       lastPlaced: ui.lastPlaced,
       anim: options.anim ? ui.anim : null,
       calm: !options.anim,      // ohne Animationen brennt die Kerze ruhig
     };
     board.render(G, view);
     ui.floaters = ui.floaters.filter(f => now - f.t0 < 1700);
+    ui.wertungen = ui.wertungen.filter(w => now - w.t0 < 2600);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -736,8 +739,17 @@ function processEvents(events) {
       scored = true;
       const names = ev.players.map(i => G.players[i].name).join(' & ');
       const color = G.players[ev.players[0]].color;
-      toast(`${names}: +${ev.points} (${FTYPE_NAME[ev.ftype] || ev.ftype}${ev.complete ? '' : ' – Restwertung'})`, color);
+      const art = FTYPE_NAME[ev.ftype] || ev.ftype;
+      toast(`${names}: +${ev.points} (${art}, ${ev.tiles} Karten`
+        + `${ev.complete ? '' : ' – Restwertung'})`, color);
       ui.floaters.push({ x: ev.x, y: ev.y, text: '+' + ev.points, color, t0: performance.now() });
+      // Und zeigen, *welches* Gebiet gemeint war. Ohne das ist eine
+      // richtige Wertung von einer falschen nicht zu unterscheiden: liegen
+      // zwei Städte nebeneinander und schließt die kleine, sieht es aus,
+      // als sei für die große gezählt worden.
+      if (ev.felder) {
+        ui.wertungen.push({ felder: ev.felder, color, t0: performance.now() });
+      }
     } else if (ev.type === 'discard') {
       toast('Karte passt nirgendwo – abgeworfen', '#93a0b4');
     } else if (ev.type === 'bonus') {
