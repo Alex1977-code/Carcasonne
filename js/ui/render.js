@@ -1822,6 +1822,23 @@ export class BoardView {
             ctx.stroke();
           }
         }
+        // Und die Marke am Setzpunkt jedes gewerteten Segments. Der Rahmen
+        // sagt, welche Karten gezählt wurden; erst die Marke sagt, welches
+        // Gebiet auf der Karte. Eine Karte kann zwei getrennte Städte
+        // tragen – dann schließt die eine, während die andere offen
+        // bleibt, und ohne Marke sieht das nach einem Fehler aus.
+        for (const st of w.stellen || []) {
+          const [sx, sy] = this.worldToScreen(st.wx, st.wy);
+          const r = Math.max(4, s * 0.11);
+          ctx.beginPath();
+          ctx.arc(sx, sy, r, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(20,14,8,0.7)';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(sx, sy, r * 0.62, 0, Math.PI * 2);
+          ctx.fillStyle = w.color;
+          ctx.fill();
+        }
         ctx.globalAlpha = 1;
       }
     }
