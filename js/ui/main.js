@@ -7,7 +7,7 @@ import {
   meepleBesetzt, finishTurn, serialize, resumeGame,
 } from '../engine/game.js';
 import { chooseMove } from '../engine/ai.js';
-import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld } from './render.js';
+import { BoardView, drawPreview, tileArt, drawMeeple, meepleSpotWorld, rotPoint } from './render.js';
 import { spreizeSpots } from './spot-layout.js';
 import { qrZeichnen } from './qr.js';
 import { sfx, applySoundOptions, unlockAudio, startMusic, stopMusic, soundState } from './sound.js';
@@ -748,7 +748,17 @@ function processEvents(events) {
       // zwei Städte nebeneinander und schließt die kleine, sieht es aus,
       // als sei für die große gezählt worden.
       if (ev.felder) {
-        ui.wertungen.push({ felder: ev.felder, color, t0: performance.now() });
+        ui.wertungen.push({
+          felder: ev.felder,
+          // Die Setzpunkte des Gebiets, schon gedreht. Eine Karte kann
+          // zwei getrennte Städte tragen – der Rahmen um die Karte sagt
+          // dann nicht, welche gemeint war.
+          stellen: (ev.stellen || []).map((st) => {
+            const [lx, ly] = rotPoint(st.spot, st.rot);
+            return { wx: st.x - 0.5 + lx, wy: st.y - 0.5 + ly };
+          }),
+          color, t0: performance.now(),
+        });
       }
     } else if (ev.type === 'discard') {
       toast('Karte passt nirgendwo – abgeworfen', '#93a0b4');

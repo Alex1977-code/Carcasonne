@@ -320,6 +320,23 @@ function featurePoints(data, complete) {
   return 0;
 }
 
+/**
+ * Die Setzpunkte aller Segmente eines Gebiets, mit Karte und Drehung.
+ * Die Drehung bleibt roh – gedreht wird in der Anzeige, damit die Rechnung
+ * nur an einer Stelle steht (rotPoint in render.js).
+ */
+function segmentStellen(s, rootId) {
+  const aus = [];
+  for (let i = 0; i < s.segs.length; i++) {
+    if (find(s, i) !== rootId) continue;
+    const seg = s.segs[i];
+    const p = s.placed[seg.p];
+    const f = DEFS[p.defId].f[seg.fi];
+    if (f && f.spot) aus.push({ x: p.x, y: p.y, rot: p.rot, spot: f.spot });
+  }
+  return aus;
+}
+
 function scoreFeature(s, rootId, complete, category) {
   const data = s.roots.get(rootId);
   if (data.scored) return;
@@ -354,6 +371,12 @@ function scoreFeature(s, rootId, complete, category) {
     // erkennen, *welches* Gebiet gemeint war – bei zwei Städten
     // nebeneinander sieht eine richtige Wertung dann aus wie ein Fehler.
     felder: [...data.tiles],
+    // Und wo genau auf der Karte. Der Rahmen um die Karte allein genügt
+    // nicht: eine Karte kann **zwei getrennte Städte** tragen (Motiv N
+    // etwa, Kanten CFFC). Dann schließt die eine und wird gewertet,
+    // während die andere offen bleibt – auf dem gemalten Bild sind beide
+    // Gold, und die Wertung sieht falsch aus, obwohl sie stimmt.
+    stellen: segmentStellen(s, rootId),
   });
   returnMeeples(s, data);
 }
@@ -391,7 +414,8 @@ function scoreMonastery(s, monSegId, complete) {
     }
   }
   s.events.push({ type: 'score', ftype: 'mon', points: n, players: [owner],
-    complete: n >= 9, x: p.x, y: p.y, tiles: n, felder });
+    complete: n >= 9, x: p.x, y: p.y, tiles: n, felder,
+    stellen: segmentStellen(s, monSegId) });
   returnMeeples(s, data);
 }
 
@@ -498,7 +522,12 @@ function finalScoring(s) {
       s.players[w].score += pts;
       s.players[w].breakdown.field += pts;
     }
-    s.events.push({ type: 'score', ftype: 'field', points: pts, players: winners, complete: false, x: c.x, y: c.y, tiles: data.tiles.size });
+    // Auch die Wiese sagt, wo sie liegt. Sie hat es sogar nötiger als
+    // Stadt und Straße: eine Wiese zieht sich über ein halbes Brett und
+    // ist auf dem Bild überhaupt nicht als Gebiet zu erkennen.
+    s.events.push({ type: 'score', ftype: 'field', points: pts, players: winners,
+      complete: false, x: c.x, y: c.y, tiles: data.tiles.size,
+      felder: [...data.tiles], stellen: segmentStellen(s, r) });
     returnMeeples(s, data);
   }
   // König & Räuber

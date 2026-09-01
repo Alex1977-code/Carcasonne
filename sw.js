@@ -16,7 +16,7 @@
 // Wartezeit ist gedeckelt: kommt binnen drei Sekunden nichts, gilt der
 // Cache. Bei schlechtem Empfang startet das Spiel dadurch genauso schnell
 // wie vorher.
-const CACHE = 'carcassonne-v24';
+const CACHE = 'carcassonne-v25';
 const FRIST = 3000;   // so lange wird höchstens auf das Netz gewartet
 const ASSETS = [
   './',

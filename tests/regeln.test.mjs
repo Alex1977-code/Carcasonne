@@ -1137,6 +1137,58 @@ console.log('=== 20. Jeder angebotene Punkt muss auch antippbar sein ===');
   console.log(`   ${wertungen} abgeschlossene Gebiete gegen die Geometrie geprüft`);
 }
 
+// ---------------------------------------------------------------------------
+// Eine Karte kann zwei getrennte Städte tragen
+//
+// Aus der Fehlersuche zum gemeldeten Fall „Punkte, obwohl die Stadt offen
+// ist". Nachgestellt wurde er nicht – wohl aber die Lage, die so aussieht:
+// Motive wie N (Kanten CFFC) tragen **zwei** Städte. Schließt die eine und
+// wird gewertet, bleibt die andere offen. Auf dem gemalten Bild sind beide
+// Gold, und die Wertung sieht falsch aus, obwohl sie stimmt.
+//
+// Genau daran ist auch meine erste Prüfung gescheitert: sie zählte die
+// offenen Kanten *aller* Gebiete auf den gewerteten Karten und meldete
+// 71 Scheinbefunde. Deshalb steht hier fest, dass es solche Motive gibt –
+// und dass die Wertung die Setzpunkte des gewerteten Gebiets mitschickt,
+// damit am Brett zu sehen ist, welches gemeint war.
+{
+  const zweiStaedte = Object.entries(DEFS).filter(([, d]) =>
+    d.f.filter((f) => f.t === 'city').length >= 2);
+  ok(zweiStaedte.length >= 3,
+    `es gibt Motive mit zwei getrennten Städten (${zweiStaedte.length})`);
+
+  const s = newGame(zwei({ deckIds: ['E', 'E', 'E'], startId: 'D' }));
+  let mitStellen = 0, gesamt = 0;
+  let schritte = 0;
+  const t = newGame(festerStapel({
+    players: [
+      { name: 'A', color: '#D6321A', type: 'ai1' },
+      { name: 'B', color: '#196CCD', type: 'ai1' },
+    ],
+    expansions: {}, deckScale: 1,
+  }, 7));
+  while (t.phase !== 'over' && schritte++ < 400) {
+    if (t.phase === 'place') {
+      const stellen = legalPlacementsFor(t, t.drawn);
+      if (!stellen.length) break;
+      const st = stellen[(schritte * 13) % stellen.length];
+      placeCurrent(t, st.x, st.y, st.rots[schritte % st.rots.length]);
+    }
+    const opts = meepleOptions(t);
+    const nimm = opts.length ? opts[schritte % opts.length] : null;
+    const ev = finishTurn(t, nimm ? { fi: nimm.fi, big: t.players[t.current].meeples <= 0 } : null);
+    for (const e of ev) {
+      if (e.type !== 'score' || !e.points) continue;
+      gesamt++;
+      if (Array.isArray(e.stellen) && e.stellen.length) mitStellen++;
+    }
+  }
+  ok(gesamt >= 5, `genug Wertungen geprüft (waren ${gesamt})`);
+  eq(mitStellen, gesamt, 'jede Wertung nennt die Setzpunkte des gewerteten Gebiets');
+  console.log(`   ${gesamt} Wertungen, alle mit Setzpunkten; ${zweiStaedte.length} Motive mit zwei Städten`);
+  void s;
+}
+
 console.log(`\n${passed} Prüfungen bestanden, ${failed} fehlgeschlagen.`);
 if (failed) {
   console.log('\nOffene Punkte:');
