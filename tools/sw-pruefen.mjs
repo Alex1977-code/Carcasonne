@@ -211,7 +211,14 @@ console.log('4. Andere Speicher unter derselben Adresse');
   lage.wurzel = v2;
   await laden(page);
   await warteAuf(page, 'v2', 25000);
-  await pause(800);
+  // Warten, bis der neue Stand wirklich übernommen und aufgeräumt hat –
+  // erst dann ist zu sehen, was er dabei gelöscht hat.
+  for (let i = 0; i < 80; i++) {
+    const n = await page.evaluate(() => caches.keys()).catch(() => []);
+    if (n.some((x) => x.includes(`v${nr2}`)) && !n.some((x) => x.includes(`v${nr1}`))) break;
+    await pause(250);
+  }
+  await pause(500);
   const namen = await page.evaluate(() => caches.keys());
   ok(namen.includes('ubongo-v3'), `der fremde Speicher ist noch da (${namen.join(', ')})`);
   ok(namen.filter((n) => n.startsWith('carcassonne-')).length === 1, 'vom Spiel genau einer');
@@ -224,10 +231,14 @@ console.log('5. Eine andere Seite im selben Ordner');
   await page.goto(BASIS + 'debug/gallery.html').catch(() => {});
   await pause(1200);
   lage.offline = true;
-  await page.goto(BASIS).catch(() => {});
-  await pause(1500);
-  const menue = await page.evaluate(() => !!document.getElementById('screen-menu')).catch(() => false);
-  ok(menue && await stand(page) === 'v1', 'ohne Netz startet danach das Spiel und nicht die Galerie');
+  // Beide Adressen: der Ordner und index.html. Die installierte App
+  // startet mit index.html (start_url im Manifest).
+  for (const [adresse, name] of [[BASIS, 'der Ordner'], [BASIS + 'index.html', 'index.html']]) {
+    await page.goto(adresse).catch(() => {});
+    await pause(1500);
+    const menue = await page.evaluate(() => !!document.getElementById('screen-menu')).catch(() => false);
+    ok(menue && await stand(page) === 'v1', `ohne Netz startet danach das Spiel und nicht die Galerie (${name})`);
+  }
   await ctx.close();
 }
 
