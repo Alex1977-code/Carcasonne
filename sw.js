@@ -1,23 +1,38 @@
-// Service Worker – Offline-Cache mit automatischen Updates.
+// Service Worker – ein Stand, ganz oder gar nicht.
 //
-// Strategie: alles zuerst aus dem Netz, mit dem Cache als Rückfall. Wer
-// online ist, bekommt damit beim Öffnen den aktuellen Stand; wer offline
-// ist, spielt aus dem Cache weiter.
+// Jeder Stand hat seinen eigenen Zwischenspeicher. Er wird bei der
+// Einrichtung vollständig gefüllt, und erst wenn *jede* Datei da ist, wird
+// der Stand benutzt. Danach kommt alles, was zum Spiel gehört, aus genau
+// diesem Speicher – nie ein Teil von hier und ein Teil aus dem Netz.
 //
-// Vorher stand hier „stale-while-revalidate": erst aus dem Cache
-// ausliefern, dann im Hintergrund erneuern. Das hat eine unangenehme
-// Folge, die auch aufgetreten ist – nach einer Änderung zeigt das Gerät
-// beim nächsten Öffnen noch die alte Fassung, und erst beim übernächsten
-// die neue. Auf einem Telefon, das man einmal am Tag aufmacht, heißt das:
-// die Korrektur kommt einen Tag zu spät, und man sucht den Fehler an der
-// falschen Stelle.
+// Vorher: „Netz zuerst, Speicher als Rückfall", je Datei einzeln, mit einer
+// Frist von drei Sekunden. Das hält das Spiel aktuell, aber es mischt:
+// kommt nach einer neuen Fassung eine einzige Datei nicht rechtzeitig, läuft
+// die neue main.js gegen die alte render.js. Fehlt dort ein Name, den die
+// neue importiert, startet die App nicht mehr – und weil die neuen Dateien
+// einzeln in den Speicher geschrieben wurden, auch ohne Netz nicht. Im
+// Prüflauf nachgestellt (tools/sw-pruefen.mjs): eine hängende Anfrage
+// genügte.
 //
-// Das Spiel ist klein genug, dass sich das Netz-zuerst leisten lässt. Die
-// Wartezeit ist gedeckelt: kommt binnen drei Sekunden nichts, gilt der
-// Cache. Bei schlechtem Empfang startet das Spiel dadurch genauso schnell
-// wie vorher.
-const CACHE = 'carcassonne-v28';
-const FRIST = 3000;   // so lange wird höchstens auf das Netz gewartet
+// Aktuell bleibt das Spiel trotzdem – nur auf anderem Weg. Beim Öffnen
+// fragt der Browser, ob es eine neue sw.js gibt. Wenn ja, wird der neue
+// Stand im Hintergrund vollständig geholt, übernimmt, und die Seite lädt
+// sich neu, sofern gerade niemand spielt (js/ui/main.js). Wer online
+// öffnet, hat den neuen Stand also wenige Sekunden später; wer offline
+// öffnet, spielt den alten – vollständig.
+//
+// STAND wird nicht von Hand gepflegt:
+//
+//     node tools/sw-stand.mjs
+//
+// rechnet eine Prüfsumme über alle Dateien der Liste und erhöht die Nummer,
+// wenn sie sich geändert hat. tests/sw.test.mjs prüft dasselbe in der CI.
+// Ohne das wäre eine vergessene Nummer das Ende aller Aktualisierungen:
+// bleibt sw.js Byte für Byte gleich, sieht der Browser nichts Neues, und
+// die Geräte blieben für immer auf dem alten Stand.
+const STAND = { nr: 31, inhalt: '4908e0d6ab' };
+const PRAEFIX = 'carcassonne-';
+const CACHE = `${PRAEFIX}v${STAND.nr}-${STAND.inhalt}`;
 const ASSETS = [
   './',
   './index.html',
@@ -117,59 +132,67 @@ const ASSETS = [
   './icons/icon-512.png',
 ];
 
+// Der Ordner, in dem das Spiel liegt – auf GitHub Pages nicht die Wurzel.
+const BASIS = new URL('./', self.location.href);
+
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    // Am HTTP-Zwischenspeicher des Browsers vorbei. GitHub Pages erlaubt ihm
+    // zehn Minuten; ohne `no-cache` landete in einem neuen Stand, was der
+    // Browser noch vom alten herumliegen hatte.
+    // Scheitert eine einzige Datei, scheitert die Einrichtung, und der
+    // bisherige Stand bleibt unangetastet in Betrieb.
+    await cache.addAll(ASSETS.map((u) => new Request(u, { cache: 'no-cache' })));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    // Nur die eigenen alten Stände. Unter derselben Adresse können andere
+    // Spiele liegen; vorher wurde hier jeder Speicher gelöscht, der nicht
+    // der eigene war – auch deren.
+    const namen = await caches.keys();
+    await Promise.all(namen
+      .filter((n) => n.startsWith(PRAEFIX) && n !== CACHE)
+      .map((n) => caches.delete(n)));
+    await self.clients.claim();
+  })());
 });
 
-/** Netz mit Frist. Läuft sie ab, wird abgebrochen und der Cache genommen. */
-function ausDemNetz(req) {
-  const steuer = new AbortController();
-  const uhr = setTimeout(() => steuer.abort(), FRIST);
-  return fetch(req, { signal: steuer.signal }).finally(() => clearTimeout(uhr));
-}
-
-async function beantworten(req, istSeite) {
+async function beantworten(req, url) {
   const cache = await caches.open(CACHE);
+  // Das Spiel selbst – der Ordner oder index.html, mit beliebigem Anhang.
+  // Nur das. Vorher galt jede Seitennavigation im Ordner als „die Seite",
+  // und wer die Galerie unter debug/ öffnete, überschrieb damit index.html:
+  // ohne Netz startete danach die Galerie statt des Spiels.
+  const rel = url.href.slice(BASIS.href.length).split(/[?#]/)[0];
+  const istSpiel = url.href.startsWith(BASIS.href) && (rel === '' || rel === 'index.html');
+  const hit = istSpiel
+    ? await cache.match(new URL('./index.html', BASIS).href)
+    : await cache.match(req, { ignoreSearch: true });
+  if (hit) return hit;
+  // Gehört nicht zum Stand (Galerie, Dokumentation): aus dem Netz, und
+  // nichts davon wird aufgehoben.
   try {
-    const res = await ausDemNetz(req);
-    if (res && res.ok) {
-      cache.put(istSeite ? './index.html' : req, res.clone());
-      return res;
-    }
-    // 404 und Ähnliches nicht in den Cache schreiben, aber weiterreichen,
-    // wenn nichts Besseres da ist.
-    const ersatz = await cache.match(req);
-    return ersatz || res;
+    return await fetch(req);
   } catch {
-    const hit = await cache.match(req);
-    if (hit) return hit;
-    if (istSeite) {
-      const seite = await cache.match('./index.html');
-      if (seite) return seite;
-    }
     return new Response('', { status: 504, statusText: 'offline' });
   }
 }
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || !req.url.startsWith(self.location.origin)) return;
-  const istSeite = req.mode === 'navigate' || req.url.endsWith('/index.html');
-  e.respondWith(beantworten(req, istSeite));
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  e.respondWith(beantworten(req, url));
 });
 
-// Die Seite darf fragen, welcher Stand gerade ausgeliefert wird. Ohne das
-// steht in der Fußzeile eine fest verdrahtete Zahl, die sich nie ändert –
-// und dann lässt sich am Gerät nicht feststellen, ob eine Korrektur
-// überhaupt angekommen ist.
+// Die Seite darf fragen, von welchem Stand sie bedient wird – das steht
+// dann in der Fußzeile. Am Gerät ist sonst nicht festzustellen, ob eine
+// Korrektur angekommen ist.
 self.addEventListener('message', (e) => {
-  if (e.data === 'version') e.source?.postMessage({ version: CACHE });
+  if (e.data === 'version') e.source?.postMessage({ version: `v${STAND.nr}`, cache: CACHE });
 });
