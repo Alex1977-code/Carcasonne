@@ -237,6 +237,12 @@ let setup = ladeSetup();
 // { role:'host'|'guest', net, remotes:[{connId,name}], myIdx, started }
 let online = null;
 
+// Zählt jeden Beitrittsversuch. „Abbrechen" während des Verbindens schloss
+// bisher nur den Dialog: die Verbindung kam Sekunden später trotzdem
+// zustande, man saß unsichtbar im Raum, und wenn der Gastgeber startete,
+// sprang auf dem eigenen Telefon eine Partie auf.
+let beitritt = 0;
+
 function totalPlayerCount() {
   return setup.players.length + (online && online.role === 'host' ? online.remotes.length : 0);
 }
@@ -267,7 +273,7 @@ function renderPlayerRows() {
     name.maxLength = 14;
     name.value = p.name;
     name.placeholder = 'Name';
-    name.addEventListener('input', () => { p.name = name.value; });
+    name.addEventListener('input', () => { p.name = name.value; sendeLobby(); });
     const type = document.createElement('select');
     [['human', 'Mensch'], ['ai1', 'KI leicht'], ['ai2', 'KI mittel'], ['ai3', 'KI schwer']]
       .forEach(([v, label]) => {
@@ -276,7 +282,7 @@ function renderPlayerRows() {
         if (p.type === v) o.selected = true;
         type.appendChild(o);
       });
-    type.addEventListener('change', () => { p.type = type.value; });
+    type.addEventListener('change', () => { p.type = type.value; sendeLobby(); });
     row.append(dot, name, type);
     if (setup.players.length > (online && online.role === 'host' && online.remotes.length ? 1 : 2)) {
       const rm = document.createElement('button');
@@ -307,6 +313,11 @@ function renderPlayerRows() {
     });
   }
   $('btnAddPlayer').classList.toggle('hidden', totalPlayerCount() >= 6);
+  // Jede Änderung an der Aufstellung geht an die Gäste – nicht nur ihr
+  // Kommen und Gehen. Nahm der Gastgeber einen lokalen Spieler dazu oder
+  // weg, behielten die Gäste ihren alten Platz, und beim Start steuerte
+  // jeder die Figur eines anderen (oder keine).
+  sendeLobby();
 }
 
 // freie Farbe für Gast i (nach den lokalen Spielern)
@@ -398,18 +409,23 @@ function rosterForLobby() {
   return [...locals, ...remotes];
 }
 
-function broadcastLobby() {
-  if (!online || online.role !== 'host') return;
+/** Den Gästen die Aufstellung schicken – und jedem seinen Platz darin. */
+function sendeLobby() {
+  if (!online || online.role !== 'host' || online.started) return;
   const roster = rosterForLobby();
   online.remotes.forEach((r, i) => {
     online.net.sendTo(r.connId, {
       t: 'lobby', roster, you: setup.players.length + i,
     });
   });
+}
+
+function broadcastLobby() {
+  if (!online || online.role !== 'host') return;
   $('hostStatus').textContent = online.remotes.length
     ? `${online.remotes.length} Gast/Gäste verbunden – „Spiel starten“, wenn alle da sind.`
     : 'Warte auf Mitspieler…';
-  renderPlayerRows();
+  renderPlayerRows();     // schickt die Aufstellung mit
 }
 
 $('btnHost').addEventListener('click', async () => {
@@ -468,6 +484,11 @@ function raumAusAdresse() {
 
 function wireHostNet(net) {
   net.onGuestJoin = () => { /* Name kommt mit hello */ };
+  // Der Raum steht, aber der Vermittler ist weg: wer schon da ist, spielt
+  // weiter, neue Gäste kommen nicht mehr herein. Das stand bisher nirgends.
+  net.onError = (text) => {
+    if (online && !online.started) $('hostStatus').textContent = `${text} – neue Gäste können gerade nicht beitreten.`;
+  };
   net.onGuestLeave = (connId) => {
     const i = online.remotes.findIndex(r => r.connId === connId);
     if (i >= 0) {
@@ -492,9 +513,12 @@ function wireHostNet(net) {
       broadcastLobby();
       sfx.meeple();
     } else if (msg.t === 'move' && online.started && G) {
-      const idx = online.remotes.findIndex(r => r.connId === connId);
-      const playerIdx = setup.players.length + idx;
-      if (idx >= 0) queueRemoteMove(msg.move, playerIdx, connId);
+      const r = online.remotes.find(q => q.connId === connId);
+      if (r) queueRemoteMove(msg.move, r.idx, connId);
+    } else if (msg.t === 'quit') {
+      // Der Gast sagt selbst, dass er geht. Auf das Ende der Verbindung
+      // zu warten kann dauern – solange stünde die Partie.
+      net.onGuestLeave && net.onGuestLeave(connId);
     }
   };
 }
@@ -504,16 +528,36 @@ $('btnHostCancel').addEventListener('click', () => {
   teardownOnline();
 });
 
-function teardownOnline() {
-  if (online) {
-    try { online.net.broadcast && online.net.broadcast({ t: 'quit' }); } catch { /* egal */ }
-    if (online.role === 'guest') { try { online.net.sendToHost({ t: 'quit' }); } catch { /* egal */ } }
-    online.net.close();
-  }
+/**
+ * Den Online-Raum verlassen.
+ *
+ * @param {string|null} meldung Steht hier ein Text, bleibt der
+ *   Beitritts-Dialog offen und zeigt ihn. Vorher wurde der Dialog in jedem
+ *   Fall geschlossen – auch dann, wenn eben die Fehlermeldung hineingeschrieben
+ *   worden war („Der Raum ist voll"). Man sah: nichts.
+ */
+function teardownOnline(meldung = null) {
+  // Erst abmelden, dann schließen. `online` war bisher noch gesetzt, während
+  // die Verbindung zuging; das Schließen meldet „Verbindung beendet", die
+  // Antwort darauf war wieder dieses Aufräumen, und so weiter.
+  const o = online;
   online = null;
+  beitritt++;              // ein Beitritt, der noch unterwegs ist, gilt nicht mehr
+  if (o) {
+    try { if (o.role === 'host') o.net.broadcast({ t: 'quit' }); } catch { /* egal */ }
+    try { if (o.role === 'guest') o.net.sendToHost({ t: 'quit' }); } catch { /* egal */ }
+    o.net.close();
+  }
   $('onlineOff').classList.remove('hidden');
   $('onlineHost').classList.add('hidden');
-  $('joinModal').classList.add('hidden');
+  if (meldung) {
+    $('joinForm').classList.remove('hidden');
+    $('joinLobby').classList.add('hidden');
+    $('joinError').textContent = meldung;
+    $('joinModal').classList.remove('hidden');
+  } else {
+    $('joinModal').classList.add('hidden');
+  }
   // Als Gastgeber genügt ein lokaler Spieler; ohne Raum nicht mehr.
   mindestensZwei(setup);
   renderPlayerRows();
@@ -538,10 +582,15 @@ $('btnJoinGo').addEventListener('click', async () => {
   const code = $('joinCode').value.trim().toUpperCase();
   const name = $('joinName').value.trim() || 'Gast';
   if (code.length < 4) { $('joinError').textContent = 'Bitte den Raum-Code eingeben.'; return; }
+  // Ein Raum, der noch offen ist, wird erst geschlossen – der Dialog
+  // bleibt dabei stehen.
+  if (online) { teardownOnline(); $('joinModal').classList.remove('hidden'); }
+  const nr = ++beitritt;
   $('btnJoinGo').disabled = true;
   $('joinError').textContent = 'Verbinde…';
   try {
     const net = await Net.join(code);
+    if (nr !== beitritt) { net.close(); return; }   // inzwischen abgebrochen
     online = { role: 'guest', net, remotes: [], started: false, myIdx: -1 };
     wireGuestNet(net);
     net.sendToHost({ t: 'hello', name });
@@ -550,7 +599,7 @@ $('btnJoinGo').addEventListener('click', async () => {
     $('joinRoomCode').textContent = code;
     $('joinError').textContent = '';
   } catch (e) {
-    $('joinError').textContent = e.message || 'Verbindung fehlgeschlagen';
+    if (nr === beitritt) $('joinError').textContent = e.message || 'Verbindung fehlgeschlagen';
   } finally {
     $('btnJoinGo').disabled = false;
   }
@@ -558,56 +607,100 @@ $('btnJoinGo').addEventListener('click', async () => {
 
 function wireGuestNet(net) {
   net.onHostLost = () => {
-    if (online && online.started && G && G.phase !== 'over') {
-      alert('Verbindung zum Host verloren – das Spiel wird beendet.');
+    // Nur einmal, und nur solange dies noch unser Raum ist.
+    if (!online || online.net !== net) return;
+    const mitten = online.started && G && G.phase !== 'over';
+    if (mitten) {
       teardownOnline();
       G = null;
+      partie++;
+      setNetStatus(null);
       showScreen('menu');
+      alert('Verbindung zum Host verloren – das Spiel wird beendet.');
+    } else if (online.started) {
+      teardownOnline();                 // Partie ist vorbei: still aufräumen
     } else {
-      $('joinError').textContent = 'Verbindung zum Host verloren.';
-      teardownOnline();
+      teardownOnline('Verbindung zum Host verloren.');
     }
   };
   net.onMessage = (msg) => {
-    if (!msg || typeof msg !== 'object') return;
-    if (msg.t === 'lobby') {
-      online.myIdx = msg.you;
+    if (!msg || typeof msg !== 'object' || !online || online.net !== net) return;
+    if (msg.t === 'lobby' && !online.started) {
+      if (!Array.isArray(msg.roster)) return;
+      if (Number.isInteger(msg.you)) online.myIdx = msg.you;
       const ul = $('joinRoster');
       ul.innerHTML = '';
-      msg.roster.forEach((r, i) => {
+      msg.roster.slice(0, 6).forEach((r, i) => {
+        if (!istObjekt(r)) return;
         const li = document.createElement('li');
         const dot = document.createElement('span');
         dot.className = 'dot';
-        dot.style.background = r.color;
+        dot.style.background = farbeOderGrau(r.color);
         const nm = document.createElement('span');
-        nm.textContent = r.name + (i === msg.you ? ' (du)' : '') +
+        nm.textContent = String(r.name ?? '').slice(0, 14) + (i === msg.you ? ' (du)' : '') +
           (r.kind === 'ai' ? ' (KI)' : r.kind === 'remote' && i !== msg.you ? ' (online)' : '');
         li.append(dot, nm);
         ul.appendChild(li);
       });
     } else if (msg.t === 'full') {
-      $('joinError').textContent = 'Der Raum ist voll (max. 6 Spieler).';
-      teardownOnline();
-    } else if (msg.t === 'start') {
+      teardownOnline('Der Raum ist voll (max. 6 Spieler).');
+    } else if (msg.t === 'start' && !online.started) {
+      // Der Platz kommt mit dem Start – das ist der Stand, mit dem der
+      // Gastgeber die Partie gebaut hat. Der aus der Lobby kann älter sein.
+      if (Number.isInteger(msg.you)) online.myIdx = msg.you;
+      const einstellungen = pruefeStart(msg, online.myIdx);
+      if (!einstellungen) { teardownOnline('Der Gastgeber hat eine Partie geschickt, die sich nicht aufbauen lässt.'); return; }
       online.started = true;
       $('joinModal').classList.add('hidden');
-      const players = msg.settings.players.map((p, i) => ({
-        ...p, type: i === online.myIdx ? 'human' : 'remote',
-      }));
-      const s = newGame({
-        players,
-        expansions: msg.settings.expansions,
-        deckScale: msg.settings.deckScale,
-        deckIds: msg.deckIds,
-        startId: msg.startId,
-      });
-      startGameUI(s);
-    } else if (msg.t === 'move' && G) {
+      startGameUI(newGame(einstellungen));
+    } else if (msg.t === 'move' && G && online.started) {
       queueRemoteMove(msg.move, msg.player, 'host');
     } else if (msg.t === 'quit') {
-      net.onHostLost();
+      net.onHostLost && net.onHostLost();
     }
   };
+}
+
+// Was über das Netz kommt, hat ein anderes Gerät geschrieben – vielleicht
+// eine andere Fassung dieser App, vielleicht etwas ganz anderes. Es wird
+// geprüft, bevor es irgendwo hineinläuft. Vorher beendete `fi: 99` die
+// Partie für alle, und eine Farbe wurde ungeprüft in HTML gesetzt.
+const FARBE = /^#[0-9a-f]{6}$/i;
+const farbeOderGrau = (c) => (typeof c === 'string' && FARBE.test(c) ? c : '#888888');
+
+/** Die Einstellungen aus einer Start-Nachricht, oder null. */
+function pruefeStart(msg, ich) {
+  const e = msg.settings;
+  if (!istObjekt(e) || !Array.isArray(e.players) || !Array.isArray(msg.deckIds)) return null;
+  if (e.players.length < 2 || e.players.length > 6) return null;
+  if (!Number.isInteger(ich) || ich < 0 || ich >= e.players.length) return null;
+  if (typeof msg.startId !== 'string' || !DEFS[msg.startId]) return null;
+  if (msg.deckIds.length > 1200 || msg.deckIds.some((id) => typeof id !== 'string' || !DEFS[id])) return null;
+  const ex = alsObjekt(e.expansions);
+  return {
+    players: e.players.map((p, i) => ({
+      name: String((istObjekt(p) && p.name) || `Spieler ${i + 1}`).slice(0, 14),
+      color: farbeOderGrau(istObjekt(p) ? p.color : null),
+      type: i === ich ? 'human' : 'remote',
+    })),
+    expansions: { river: !!ex.river, inns: !!ex.inns, king: !!ex.king },
+    deckScale: [1, 2, 4].includes(e.deckScale) ? e.deckScale : 1,
+    deckIds: msg.deckIds.slice(),
+    startId: msg.startId,
+  };
+}
+
+/** Ein Zug aus dem Netz, auf das Nötige zurückgeführt – oder null. */
+function pruefeZug(move) {
+  if (!istObjekt(move)) return null;
+  const { x, y, rot } = move;
+  if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(rot) || rot < 0 || rot > 3) return null;
+  let meeple = null;
+  if (move.meeple != null) {
+    if (!istObjekt(move.meeple) || !Number.isInteger(move.meeple.fi) || move.meeple.fi < 0) return null;
+    meeple = { fi: move.meeple.fi, big: !!move.meeple.big };
+  }
+  return { x, y, rot, meeple };
 }
 
 // ---- Start durch den Host ----
@@ -625,6 +718,8 @@ function startOnlineGame() {
     deckScale: setup.deckScale,
   });
   online.started = true;
+  // Der Platz jedes Gasts, festgehalten für die ganze Partie.
+  online.remotes.forEach((r, i) => { r.idx = locals.length + i; });
   const settingsWire = {
     players: players.map(p => ({ name: p.name, color: p.color, type: p.type === 'remote' ? 'remote' : p.type })),
     expansions: { ...setup.expansions },
@@ -633,6 +728,7 @@ function startOnlineGame() {
   online.remotes.forEach((r) => {
     online.net.sendTo(r.connId, {
       t: 'start', settings: settingsWire, deckIds: s.initialDeck, startId: s.startId,
+      you: r.idx,
     });
   });
   startGameUI(s);
@@ -641,8 +737,12 @@ function startOnlineGame() {
 // ---- Züge über das Netz ----
 const netQueue = [];
 function queueRemoteMove(move, playerIdx, origin) {
-  if (!move) return;
-  netQueue.push({ move, playerIdx, origin });
+  const zug = pruefeZug(move);
+  if (!zug || !G || !Number.isInteger(playerIdx) || playerIdx < 0 || playerIdx >= G.players.length) {
+    console.warn('Zug aus dem Netz verworfen', move, playerIdx);
+    return;
+  }
+  netQueue.push({ move: zug, playerIdx, origin });
   pumpNet();
 }
 
@@ -664,7 +764,9 @@ function pumpNet() {
 // Gast-Verbindung bricht während des Spiels ab → KI übernimmt (Host)
 function remotePlayerLost(gone) {
   if (!G || G.phase === 'over') return;
-  const idx = setup.players.length + online.remotes.findIndex(r => r.connId === gone.connId);
+  const idx = Number.isInteger(gone.idx)
+    ? gone.idx
+    : setup.players.length + online.remotes.findIndex(r => r.connId === gone.connId);
   const p = G.players[idx];
   if (p && p.type === 'remote') {
     p.type = 'ai2';
@@ -994,8 +1096,20 @@ async function playMove(mv, origin = null) {
   updateHud();
   await wait(options.anim ? 420 : 80);
   if (!lebt()) return;
-  if (mv.meeple) sfx.meeple();
-  finishTurnSafe(mv.meeple, origin);
+  // Ein Gefolgsmann aus dem Netz, den es hier nicht geben kann (Gebiet
+  // besetzt, keine Figur mehr, kein solches Gebiet): die Karte liegt
+  // bereits, also geht der Zug ohne ihn zu Ende. Alle Geräte bekommen
+  // denselben Zug und entscheiden gleich. Vorher blieb die Partie hier
+  // für alle stehen.
+  let meeple = mv.meeple;
+  if (meeple && !meepleOptions(G).some((o) => o.fi === meeple.fi)) {
+    console.warn('Gefolgsmann aus dem Netz nicht setzbar', mv);
+    meeple = null;
+  }
+  if (meeple && meeple.big && G.players[G.current].bigMeeples <= 0) meeple = { fi: meeple.fi, big: false };
+  if (meeple && !meeple.big && G.players[G.current].meeples <= 0) meeple = G.players[G.current].bigMeeples > 0 ? { fi: meeple.fi, big: true } : null;
+  if (meeple) sfx.meeple();
+  finishTurnSafe(meeple, origin);
 }
 
 async function aiTurn(force = false) {
@@ -1525,6 +1639,8 @@ refreshMenu();
 // Debug-/Test-Hook (auch nützlich als „Zug vorschlagen“)
 window.__carc = {
   get state() { return G; },
+  /** Der Online-Zustand – für Prüfläufe, die Nachrichten einspielen. */
+  get netz() { return online; },
   /** Das Brett – für Prüfläufe, die die Kamera bewegen müssen. */
   get brett() { return board; },
   /**

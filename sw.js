@@ -30,7 +30,7 @@
 // Ohne das wäre eine vergessene Nummer das Ende aller Aktualisierungen:
 // bleibt sw.js Byte für Byte gleich, sieht der Browser nichts Neues, und
 // die Geräte blieben für immer auf dem alten Stand.
-const STAND = { nr: 31, inhalt: '4908e0d6ab' };
+const STAND = { nr: 32, inhalt: 'ec8df6ddf0' };
 const PRAEFIX = 'carcassonne-';
 const CACHE = `${PRAEFIX}v${STAND.nr}-${STAND.inhalt}`;
 const ASSETS = [
