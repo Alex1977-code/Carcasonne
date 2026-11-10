@@ -6,6 +6,7 @@
  *   node tools/sw-pruefen.mjs               # der Stand auf der Platte
  *   node tools/sw-pruefen.mjs --alt=<ref>   # ein früherer Stand, zur Gegenprobe
  *   node tools/sw-pruefen.mjs --alt=<ref> --ohne-http-cache
+ *   node tools/sw-pruefen.mjs --von=<ref>   # Übergang: <ref> läuft, die Platte kommt
  *
  * Gebaut werden zwei Kopien. Die zweite unterscheidet sich so, wie sich
  * eine echte neue Fassung unterscheidet: ein Modul bekommt einen neuen
@@ -33,14 +34,17 @@ import { ROOT, starteBrowser } from './_browser.mjs';
 
 const alt = (process.argv.find((a) => a.startsWith('--alt=')) || '').split('=')[1] || null;
 const OHNE_HTTP_CACHE = process.argv.includes('--ohne-http-cache');
+// Der Fall, der auf den Geräten wirklich eintritt: dort läuft noch ein
+// früherer Worker, und der neue löst ihn ab.
+const von = (process.argv.find((a) => a.startsWith('--von=')) || '').split('=')[1] || null;
 
 // ------------------------------------------------------------ zwei Fassungen
 const arbeit = mkdtempSync(join(tmpdir(), 'carc-sw-'));
-function baue(name) {
+function baue(name, ref = alt) {
   const ziel = join(arbeit, name);
   mkdirSync(ziel);
-  if (alt) {
-    execSync(`git -C "${ROOT}" archive ${alt} | tar -x -C "${ziel}"`);
+  if (ref) {
+    execSync(`git -C "${ROOT}" archive ${ref} | tar -x -C "${ziel}"`);
   } else {
     cpSync(ROOT, ziel, {
       recursive: true,
@@ -59,7 +63,7 @@ function baue(name) {
 const anhaengen = (datei, text) => writeFileSync(datei, readFileSync(datei, 'utf8') + text);
 const voranstellen = (datei, text) => writeFileSync(datei, text + readFileSync(datei, 'utf8'));
 
-const v1 = baue('v1');
+const v1 = baue('v1', von || alt);
 const v2 = baue('v2');
 anhaengen(join(v1, 'js/ui/main.js'), "\nwindow.__stand = 'v1';\n");
 anhaengen(join(v2, 'js/ui/render/rng.js'), "\nexport const NEU_IN_V2 = 'v2';\n");
@@ -153,6 +157,44 @@ async function warteAuf(page, soll, ms) {
 const laden = (page) => page.reload({ waitUntil: 'load', timeout: 30000 }).catch(() => {});
 
 console.log(`Service Worker ${alt ? 'von ' + alt : 'von der Platte'} – v${nr1} gegen v${nr2}${OHNE_HTTP_CACHE ? ', ohne HTTP-Zwischenspeicher' : ''}\n`);
+
+if (von) {
+  console.log(`0. Übergang: auf dem Gerät läuft der Worker von ${von}`);
+  for (const [name, stoerung] of [['ungestört', null], ['eine Anfrage hängt', { verzoegern: 6000 }], ['eine Datei scheitert zunächst', { status: 500 }]]) {
+    const { ctx, page } = await neu();
+    await page.evaluate(async () => { const c = await caches.open('ubongo-v3'); await c.put('/ubongo/x', new Response('1')); });
+    lage.wurzel = v2;
+    if (stoerung) lage.regeln.set('/js/ui/render/rng.js', stoerung);
+    await laden(page);
+    await pause(stoerung && stoerung.status ? 3000 : 500);
+    lage.regeln.clear();
+    if (stoerung && stoerung.status) await laden(page);       // nächstes Öffnen, jetzt ohne Störung
+    // Warten, bis der neue Stand eingerichtet ist und aufgeräumt hat
+    let namen = [];
+    for (let i = 0; i < 120; i++) {
+      namen = await page.evaluate(() => caches.keys()).catch(() => []);
+      if (namen.some((x) => x.startsWith(`carcassonne-v${nr2}-`)) && namen.filter((x) => x.startsWith('carcassonne-')).length === 1) break;
+      await pause(250);
+    }
+    ok(namen.some((x) => x.startsWith(`carcassonne-v${nr2}-`)), `${name}: der neue Stand richtet sich ein (${namen.join(', ')})`);
+    ok(namen.includes('ubongo-v3'), `${name}: der fremde Speicher bleibt`);
+    // Spätestens beim nächsten Öffnen läuft der neue Stand, vollständig
+    await laden(page);
+    const r = await warteAuf(page, 'v2', 15000);
+    ok(r.ok, r.ok ? `${name}: beim nächsten Öffnen läuft v2` : `${name}: beim nächsten Öffnen läuft ${r.s}${page._fehler.length ? ' – ' + page._fehler[page._fehler.length - 1].slice(0, 80) : ''}`);
+    lage.offline = true;
+    await laden(page);
+    await pause(1500);
+    const ohne = await stand(page);
+    ok(ohne === 'v2', `${name}: und ohne Netz ebenso (${ohne})`);
+    await ctx.close();
+  }
+  await browser.close();
+  server.close();
+  rmSync(arbeit, { recursive: true, force: true });
+  console.log(`\n${gut} bestanden, ${schlecht} fehlgeschlagen`);
+  process.exit(schlecht ? 1 : 0);
+}
 
 console.log('1. Eine neue Fassung kommt an');
 {
