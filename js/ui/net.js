@@ -3,9 +3,16 @@
 // Host = Autorität, Stern-Topologie. Transport:
 //  - PeerJS (WebRTC, kostenloser öffentlicher Broker) für
 //    verschiedene Geräte, Raumcode zum Teilen
-//  - BroadcastChannel als Fallback/Test (Codes mit „T“ am Anfang:
-//    zwei Tabs im selben Browser)
+//  - BroadcastChannel nur für Prüfläufe (zwei Tabs im selben Browser),
+//    eingeschaltet über window.__carcTestNetz
 // ============================================================
+
+// Der Prüftransport wurde früher am Raumcode erkannt: fing er mit „T" an,
+// lief der Raum über BroadcastChannel. Das Alphabet der Codes enthält aber
+// ein T. Jeder 32. Raum – 3,1 % – war deshalb nur im selben Browser
+// erreichbar, und wer von einem anderen Gerät beitreten wollte, bekam
+// „Kein Spiel mit diesem Code gefunden".
+const testNetz = () => typeof window !== 'undefined' && window.__carcTestNetz === true;
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export function makeCode(len = 5) {
@@ -21,8 +28,8 @@ class BCConn {
     this.bc = bc; this.self = self; this.id = other;
     this.onData = null; this.onClose = null;
   }
-  send(payload) { this.bc.postMessage({ kind: 'data', from: this.self, to: this.id, payload }); }
-  close() { this.bc.postMessage({ kind: 'close', from: this.self, to: this.id }); }
+  send(payload) { try { this.bc.postMessage({ kind: 'data', from: this.self, to: this.id, payload }); } catch { /* Kanal zu */ } }
+  close() { try { this.bc.postMessage({ kind: 'close', from: this.self, to: this.id }); } catch { /* Kanal zu */ } }
 }
 
 class BCTransport {
@@ -75,10 +82,16 @@ class BCTransport {
 class PeerConnWrap {
   constructor(conn) {
     this.conn = conn; this.id = conn.peer;
-    this.onData = null; this.onClose = null;
+    this.onData = null; this.onClose = null; this.onError = null;
+    // Das Ende wird genau einmal gemeldet, und ein Fehler ist noch kein
+    // Ende. Vorher lösten `close` und `error` beide `onClose` aus, beliebig
+    // oft – und das Aufräumen danach schloss die Verbindung, was wieder
+    // `close` auslöste. Auf der Gegenseite standen dann rund 900
+    // Hinweisfenster hintereinander.
+    let zu = false;
     conn.on('data', (d) => this.onData && this.onData(d));
-    conn.on('close', () => this.onClose && this.onClose());
-    conn.on('error', () => this.onClose && this.onClose());
+    conn.on('close', () => { if (zu) return; zu = true; this.onClose && this.onClose(); });
+    conn.on('error', (e) => { this.onError && this.onError(e); });
   }
   send(payload) { try { this.conn.send(payload); } catch { /* Verbindung weg */ } }
   close() { try { this.conn.close(); } catch { /* egal */ } }
@@ -91,6 +104,21 @@ class PeerTransport {
     this.conns = new Map();
     this.onConn = null; this.onError = null;
     this.isHost = false;
+    this.zu = false;
+  }
+  /**
+   * Die Verbindung zum Vermittler ist weg. Bestehende Verbindungen zu den
+   * Mitspielern laufen weiter, aber niemand kann mehr beitreten – und das
+   * merkte bisher keiner. Wieder anmelden, höchstens ein paar Mal.
+   */
+  _haltAmVermittler() {
+    let versuche = 0;
+    this.peer.on('disconnected', () => {
+      if (this.zu || this.peer.destroyed) return;
+      if (versuche++ >= 5) { this.onError && this.onError({ type: 'network' }); return; }
+      setTimeout(() => { try { if (!this.zu && !this.peer.destroyed) this.peer.reconnect(); } catch { /* egal */ } }, 800 * versuche);
+    });
+    this.peer.on('open', () => { versuche = 0; });
   }
   _newPeer(id) {
     if (typeof window === 'undefined' || !window.Peer) {
@@ -101,19 +129,23 @@ class PeerTransport {
   host() {
     this.isHost = true;
     return new Promise((res, rej) => {
-      let tries = 0;
+      let tries = 0, offen = false;
       const attempt = () => {
         this.peer = this._newPeer(peerId(this.code));
-        this.peer.on('open', () => res(this.code));
+        this.peer.on('open', () => { offen = true; res(this.code); });
+        this._haltAmVermittler();
         this.peer.on('error', (e) => {
-          if (e.type === 'unavailable-id' && tries++ < 3) {
+          if (e.type === 'unavailable-id' && !offen && tries++ < 3) {
             this.code = makeCode();
             try { this.peer.destroy(); } catch { /* egal */ }
             attempt();
           } else if (e.type === 'peer-unavailable') {
             // Gast weg – ignorieren
-          } else {
+          } else if (!offen) {
             rej(new Error(netErrorText(e)));
+          } else {
+            // Der Raum stand schon. Ablehnen kann man hier nichts mehr;
+            // vorher verschwand der Fehler deshalb einfach.
             this.onError && this.onError(e);
           }
         });
@@ -148,6 +180,7 @@ class PeerTransport {
     });
   }
   destroy() {
+    this.zu = true;
     try { this.peer && this.peer.destroy(); } catch { /* egal */ }
   }
 }
@@ -176,11 +209,13 @@ export class Net {
     this.onGuestJoin = null;             // host: (connId)
     this.onGuestLeave = null;            // host: (connId)
     this.onHostLost = null;              // guest
+    this.onError = null;                 // (text) – nach dem Aufbau
   }
 
-  static async host(code = makeCode(), useBC = false) {
-    const t = (useBC || code.startsWith('T')) ? new BCTransport(code) : new PeerTransport(code);
+  static async host(code = makeCode(), useBC = testNetz()) {
+    const t = useBC ? new BCTransport(code) : new PeerTransport(code);
     const net = new Net(t, 'host');
+    t.onError = (e) => net.onError && net.onError(netErrorText(e));
     t.onConn = (conn) => {
       net.guests.set(conn.id, { conn, name: null });
       conn.onData = (msg) => net.onMessage && net.onMessage(msg, conn.id);
@@ -195,10 +230,17 @@ export class Net {
     return net;
   }
 
-  static async join(code) {
-    const t = code.startsWith('T') ? new BCTransport(code) : new PeerTransport(code);
+  static async join(code, useBC = testNetz()) {
+    const t = useBC ? new BCTransport(code) : new PeerTransport(code);
     const net = new Net(t, 'guest');
-    const conn = await t.join();
+    let conn;
+    try {
+      conn = await t.join();
+    } catch (e) {
+      // Sonst bleibt ein halb aufgebauter Teilnehmer beim Vermittler stehen.
+      try { t.destroy(); } catch { /* egal */ }
+      throw e;
+    }
     net.hostConn = conn;
     conn.onData = (msg) => net.onMessage && net.onMessage(msg, 'host');
     conn.onClose = () => net.onHostLost && net.onHostLost();
@@ -214,6 +256,10 @@ export class Net {
     for (const [id, g] of this.guests) if (id !== exceptId) g.conn.send(msg);
   }
   close() {
+    // Erst die Ohren zu, dann schließen. Das Schließen meldet selbst
+    // „Verbindung beendet", und wer darauf wieder mit Aufräumen antwortet,
+    // dreht sich im Kreis.
+    this.onMessage = this.onGuestJoin = this.onGuestLeave = this.onHostLost = this.onError = null;
     try { this.transport.destroy(); } catch { /* egal */ }
     this.guests.clear();
     this.hostConn = null;

@@ -320,6 +320,34 @@ ich nicht. Ruckelt das Brett am Gerät bei mittlerem Zoom, ist das der
 erste Verdacht (`lodFor(s * dpr)` wählt bei dpr 2 ein doppelt so großes
 Bitmap wie nötig).
 
+## Mehrspieler: zwei Seiten und ein nachgebauter Vermittler
+
+    node tools/netz-pruefen.mjs          # 41 Prüfungen, Gastgeber und Gast
+
+Zwischen beiden Seiten sitzt kein echtes WebRTC, sondern ein Nachbau, der
+sich verhält wie PeerJS. `PeerTransport` und `PeerConnWrap` laufen
+unverändert; nur `window.Peer` ist ausgetauscht. Am Stand vor den
+Korrekturen: 1 162 Hinweisfenster, wenn der Gastgeber geht.
+
+Drei Dinge, die wiederkommen werden:
+
+* **Schließen meldet sich selbst.** Wer eine Verbindung schließt, bekommt
+  dafür sofort ein `close`, im selben Aufruf. Antwortet man darauf mit
+  Aufräumen, und das Aufräumen schließt, dreht es sich im Kreis. Deshalb
+  immer in dieser Reihenfolge: erst `online = null` und die Horcher ab
+  (`Net.close()` tut das selbst), dann schließen.
+* **Was aus dem Netz kommt, hat ein anderes Gerät geschrieben.** Jede
+  Nachricht wird geprüft, bevor sie irgendwo hineinläuft (`pruefeZug`,
+  `pruefeStart`). `fi: 99` beendete vorher die Partie für alle.
+* **Einen Prüfweg nie am Inhalt erkennen.** Der Prüftransport wurde am
+  Raumcode erkannt („fängt mit T an"). Das Alphabet der Codes enthält ein
+  T; jeder 32. Raum war nur im selben Browser erreichbar. Schalter für
+  Prüfläufe sind eigene Schalter (`window.__carcTestNetz`).
+
+Nicht nachgebaut ist das Netz selbst: Funklöcher, ein Telefon, das
+einschläft. Dafür gibt es bisher keinen Herzschlag – schläft ein Gast ein,
+wartet die Partie auf ihn.
+
 ## Neue Bögen einbauen
 
 1. Datei nach `grafik/`
