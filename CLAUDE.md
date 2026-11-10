@@ -111,6 +111,7 @@ derselbe Ablauf mit anderen Werkzeugen:
     node tools/karten-einbauen.mjs grafik/*.png     # versetzt neu zuschneiden
     node tools/karten-fluchten.mjs                  # Karten ohne Original
     node tools/karten-pruefen.mjs grafik/karten/*.webp   # danach noch einmal
+    node tools/karten-wiesen-pruefen.mjs                 # das Innere gegen die Daten
 
 Das Motiv kommt aus dem Dateinamen: `EC_CATH.png` ergibt EC_CATH,
 `U_strasse-gerade.png` ergibt U. Nach dem Einbau noch einmal messen — der
@@ -131,6 +132,37 @@ Drei Dinge, die dabei aufgefallen sind und wiederkommen werden:
   Werkzeug „kein Weg an der Kante". Widerspricht eine einzelne Kante dem
   Bild, ist es meistens das. Die Schwelle steht in `karten-pruefen.mjs`
   bei einer Sättigung von 0,45.
+
+## Die Kantenfolge sagt nichts über das Innere
+
+G (eine Stadt, die von Nord nach Süd durchgeht) und H (zwei getrennte
+Stadtkappen) haben dieselbe Kantenfolge, nur um neunzig Grad versetzt.
+Die beiden Bilder waren vertauscht. `karten-pruefen.mjs` vergleicht die
+Kanten „notfalls gedreht" und meldete beide als richtig.
+
+Im Spiel hieß das: H, dreimal im Stapel, zeigte ein durchgehendes
+Stadtband, während die Regeln zwei Kappen sahen. Wer eine Kappe schloss,
+bekam Punkte, und die gemalte Stadt lief sichtbar weiter. Das wurde
+zweimal gemeldet, und zweimal habe ich in den Regeln gesucht – 93 000
+Wertungen nachgerechnet, alle richtig – statt im Bild. Einmal habe ich
+sogar eine Erklärung geliefert, die nicht stimmte (Motiv N trage zwei
+Städte; es trägt eine).
+
+Die Lehre: **meldet jemand, dass Bild und Wertung auseinanderlaufen, erst
+das Bild gegen die Daten prüfen**, dann die Regeln.
+
+    node tools/karten-wiesen-pruefen.mjs
+    node tools/karten-wiesen-pruefen.mjs -v A B    # jeden Setzpunkt zeigen
+
+Das Werkzeug flutet das Grün und vergleicht, welche Halbkanten im Bild
+zur selben Wiese gehören, mit `field.h` aus den Motivdaten. Eine Stadt,
+die im Bild durchgeht und in den Daten nicht, teilt die Wiesen anders und
+fällt auf. Dazu prüft es, was unter jedem Setzpunkt liegt: auf O und P
+stand der Wegelagerer zu 0 % auf der Straße.
+
+Was es nicht kann: ein dünnes Goldband von einer Ornamentranke
+unterscheiden. Die Klostermauer auf EC_MON_ROAD2 überbrückt es deshalb,
+und die Karte steht mit Begründung in der Liste `BEKANNT`.
 
 ## Fluchten: die halbe Handbreit, die man sieht
 

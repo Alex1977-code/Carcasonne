@@ -24,10 +24,16 @@ export const GEMALT = [
   // Fluss – 7 von 9
   'RV_BRIDGE', 'RV_CITY2', 'RV_CURVE', 'RV_LAKE',
   'RV_ROADCURVE', 'RV_SPRING', 'RV_STRAIGHT',
-  // Wirtshäuser & Kathedralen – 15 von 16
+  // Wirtshäuser & Kathedralen – 14 von 16.
+  // EC_CROSS_CITY ist gemalt, aber herausgenommen: die Lieferung ist
+  // verzogen (die Kreuzung sitzt bei 60 % statt in der Mitte), und der
+  // Versatz, der die Wege an die Kante holt, schiebt das Wappen aus dem
+  // Bild – 744 blaue Pixel im Original, 7 auf der Karte. Das Wappen zählt
+  // zwei Punkte; eine Karte, die es verschweigt, ist schlimmer als eine
+  // gezeichnete. Kommt wieder herein, wenn sie neu gemalt ist.
   'EC_CATH', 'EC_CITY_3SHIELD', 'EC_CITY_DIAG',
   'EC_CITY_FULL', 'EC_CITY_GATE', 'EC_CITY_ROADPASS',
-  'EC_CROSS_CITY', 'EC_DOUBLE_CURVE', 'EC_DOUBLE_CURVE2',
+  'EC_DOUBLE_CURVE', 'EC_DOUBLE_CURVE2',
   'EC_INN_CITYSTRAIGHT', 'EC_INN_CURVE', 'EC_INN_STRAIGHT',
   'EC_INN_TJUNC', 'EC_MON_ROAD2', 'EC_TRIPLE_CITY',
 ];

@@ -45,7 +45,11 @@ const PORT = server.address().port;
 
 const chromium = await ladeChromium();
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  // Ohne festen Pfad: Playwright findet seinen eigenen Browser. Der Pfad,
+  // der hier früher stand, zeigte auf eine Baunummer (chromium-1194), die
+  // es nach dem nächsten Umzug der Umgebung nicht mehr gab – und damit lief
+  // kein einziges Werkzeug mehr. CHROMIUM bleibt als Ausweg.
+  executablePath: process.env.CHROMIUM || undefined,
 });
 
 for (const px of GROESSEN) {

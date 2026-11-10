@@ -1141,10 +1141,12 @@ console.log('=== 20. Jeder angebotene Punkt muss auch antippbar sein ===');
 // Eine Karte kann zwei getrennte Städte tragen
 //
 // Aus der Fehlersuche zum gemeldeten Fall „Punkte, obwohl die Stadt offen
-// ist". Nachgestellt wurde er nicht – wohl aber die Lage, die so aussieht:
-// Motive wie N (Kanten CFFC) tragen **zwei** Städte. Schließt die eine und
-// wird gewertet, bleibt die andere offen. Auf dem gemalten Bild sind beide
-// Gold, und die Wertung sieht falsch aus, obwohl sie stimmt.
+// ist". Hier stand zuerst, Motiv N trage zwei Städte und die Wertung sehe
+// deshalb nur falsch aus. Das war falsch: N hat **eine** Stadt. Die
+// Ursache lag im Bild – G und H waren vertauscht, siehe Abschnitt 23.
+// Zwei Städte tragen H, I, EC_CITY_DIAG, EC_CITY_ROADPASS und
+// EC_TRIPLE_CITY, und für die gilt, was hier geprüft wird: schließt die
+// eine und wird gewertet, bleibt die andere offen.
 //
 // Genau daran ist auch meine erste Prüfung gescheitert: sie zählte die
 // offenen Kanten *aller* Gebiete auf den gewerteten Karten und meldete
@@ -1187,6 +1189,145 @@ console.log('=== 20. Jeder angebotene Punkt muss auch antippbar sein ===');
   eq(mitStellen, gesamt, 'jede Wertung nennt die Setzpunkte des gewerteten Gebiets');
   console.log(`   ${gesamt} Wertungen, alle mit Setzpunkten; ${zweiStaedte.length} Motive mit zwei Städten`);
   void s;
+}
+
+// ---------------------------------------------------------------------------
+// 23. Was zehn unabhängige Durchsichten gefunden haben
+//
+// Die Regeln selbst hielten: 2 560 Partien, 93 358 Wertungen, keine falsch.
+// Die Fehler saßen daneben – in den Kartendaten, in den Bildern und in
+// einer Flussregel, die eine Lücke ließ. Was sich ohne Browser prüfen
+// lässt, steht hier; das Bild gegen die Daten prüft
+// tools/karten-wiesen-pruefen.mjs.
+console.log('=== 23. Kartendaten, Fluss und Eingaben ===');
+{
+  // --- G und H -------------------------------------------------------------
+  // Beide haben die Kantenfolge Stadt-Wiese-Stadt-Wiese, nur versetzt. Die
+  // Bilder waren vertauscht, und eine Prüfung der Kantenfolge „notfalls
+  // gedreht" kann das nicht sehen. Hier steht fest, was die Daten meinen,
+  // damit ein künftiger Tausch an *einer* Stelle auffällt.
+  const staedte = (id) => DEFS[id].f.filter((f) => f.t === 'city');
+  eq(staedte('G').length, 1, 'G: eine Stadt, die durchgeht');
+  eq(staedte('H').length, 2, 'H: zwei getrennte Stadtkappen');
+  eq(DEFS.G.f.filter((f) => f.t === 'field').length, 2, 'G: die Stadt teilt die Wiese in zwei');
+  eq(DEFS.H.f.filter((f) => f.t === 'field').length, 1, 'H: eine Wiese zwischen den Kappen');
+  eq(staedte('N').length, 1, 'N: eine Stadt – nicht zwei, wie hier einmal stand');
+
+  // --- Kloster zwischen zwei Wegenden --------------------------------------
+  // War eine einzige Wiese rund um die Karte. Das Kloster und die beiden
+  // Wegenden trennen sie; in 342 von 1 000 Partien mit der Erweiterung
+  // änderte das die Wiesenpunkte.
+  {
+    const w = DEFS.EC_MON_ROAD2.f.filter((f) => f.t === 'field');
+    eq(w.length, 2, 'EC_MON_ROAD2: zwei Wiesen');
+    const seiten = w.map((f) => [...f.h].sort((a, b) => a - b).join(','));
+    ok(seiten.includes('0,5,6,7') && seiten.includes('1,2,3,4'),
+      `EC_MON_ROAD2: links und rechts des Weges getrennt (waren ${seiten.join(' | ')})`);
+  }
+
+  // --- Setzpunkte auf dem eigenen Gebiet -----------------------------------
+  // O und P: der Punkt der Straße lag auf der Wiese und der Punkt der Wiese
+  // auf der Straße, weil ein Parameter stillschweigend verworfen wurde.
+  // Geprüft wird hier nur die grobe Lage – die Straße läuft von Ost nach
+  // Süd, ihr Punkt gehört also in das südöstliche Viertel.
+  for (const id of ['O', 'P']) {
+    const r = DEFS[id].f.find((f) => f.t === 'road');
+    ok(r.spot[0] > 0.5 && r.spot[1] > 0.5, `${id}: Setzpunkt der Straße im Südosten (war ${r.spot})`);
+  }
+
+  // --- Fluss: nie zurück zur Quelle ----------------------------------------
+  // Erst die Lage von Hand. Quelle, Kurve, Gerade, Kurve: die alte Regel
+  // sah zwischen den beiden Kurven eine Gerade und ließ die Umkehr zu.
+  {
+    const s = newGame({ ...zwei({ deckIds: ['RV_CURVE', 'RV_STRAIGHT', 'RV_CURVE', 'RV_LAKE'], startId: 'RV_SPRING' }),
+      expansions: { river: true } });
+    const wasser = (p) => [0, 1, 2, 3].filter((d) => edgeAt(p.defId, p.rot, d) === 'W');
+    const d0 = wasser(s.placed[0])[0];
+    // Erste Kurve: irgendeine erlaubte Lage
+    let st = legalPlacementsFor(s, 'RV_CURVE');
+    eq(st.length, 1, 'die erste Flusskarte hat genau einen Platz');
+    placeCurrent(s, st[0].x, st[0].y, st[0].rots[0]);
+    const d1 = wasser(s.placed[1]).find((d) => d !== opp(d0));
+    finishTurn(s, null);
+    st = legalPlacementsFor(s, 'RV_STRAIGHT');
+    placeCurrent(s, st[0].x, st[0].y, st[0].rots[0]);
+    finishTurn(s, null);
+    // Zweite Kurve: zwei Lagen passen ans Wasser – weiter in Richtung d0
+    // oder zurück.
+    const p2 = s.placed[2];
+    const x = p2.x + DIRS[d1].dx, y = p2.y + DIRS[d1].dy;
+    const lagen = { vor: [], zurueck: [] };
+    for (let rot = 0; rot < 4; rot++) {
+      const w = [0, 1, 2, 3].filter((d) => edgeAt('RV_CURVE', rot, d) === 'W');
+      if (!w.includes(opp(d1))) continue;
+      const raus = w.find((d) => d !== opp(d1));
+      if (raus === d0) lagen.vor.push(rot);
+      if (raus === opp(d0)) lagen.zurueck.push(rot);
+    }
+    eq(lagen.vor.length, 1, 'eine Lage führt weiter flussabwärts');
+    eq(lagen.zurueck.length, 1, 'eine Lage führt zurück zur Quelle');
+    ok(isLegal(s, 'RV_CURVE', x, y, lagen.vor[0]), 'flussabwärts ist erlaubt');
+    ok(!isLegal(s, 'RV_CURVE', x, y, lagen.zurueck[0]), 'zurück zur Quelle ist verboten, auch nach einer Geraden');
+  }
+  // Dann die Folge davon: der Fluss kommt immer am See an. Beim vierfachen
+  // Stapel blieb er vorher in 39 % der Partien stecken; ein Lauf über
+  // sechzig Partien hätte das nicht übersehen können.
+  {
+    let partien = 0, abwurf = 0, ohneSee = 0, karten = 0;
+    for (const deckScale of [1, 2, 4]) {
+      for (let seed = 0; seed < 60; seed++) {
+        const s = newGame(festerStapel({
+          players: [
+            { name: 'A', color: '#D6321A', type: 'human' },
+            { name: 'B', color: '#196CCD', type: 'human' },
+          ],
+          expansions: { river: true }, deckScale,
+        }, 0xf1055 + seed * 31 + deckScale));
+        let schritte = 0;
+        while (s.phase !== 'over' && s.drawn && DEFS[s.drawn].edges.includes('W') && schritte++ < 200) {
+          const st = legalPlacementsFor(s, s.drawn);
+          const wahl = st[(seed * 7 + schritte * 13) % st.length];
+          placeCurrent(s, wahl.x, wahl.y, wahl.rots[(seed + schritte * 5) % wahl.rots.length]);
+          finishTurn(s, null);
+          karten++;
+        }
+        partien++;
+        if (s.discards.some((id) => DEFS[id].edges.includes('W'))) abwurf++;
+        if (!s.placed.some((p) => p.defId === 'RV_LAKE')) ohneSee++;
+      }
+    }
+    eq(abwurf, 0, 'keine Flusskarte wird abgeworfen');
+    eq(ohneSee, 0, 'jeder Fluss endet im See');
+    console.log(`   ${partien} Flussläufe, ${karten} Flusskarten gelegt`);
+  }
+
+  // --- Eingaben ------------------------------------------------------------
+  // placeCurrent nahm rot = 4, rot = "1", x = null an und schrieb sie in den
+  // Spielstand. Abgewiesen wird jetzt, bevor etwas verändert ist.
+  {
+    const s = newGame(zwei({ deckIds: ['U', 'U', 'U'], startId: 'D' }));
+    const st = legalPlacementsFor(s, s.drawn)[0];
+    const vorher = JSON.stringify({ n: s.placed.length, phase: s.phase, drawn: s.drawn });
+    const wirft = (f) => { try { f(); return false; } catch { return true; } };
+    for (const [x, y, rot, was] of [
+      [st.x, st.y, 4, 'rot = 4'], [st.x, st.y, -1, 'rot = -1'], [st.x, st.y, '1', 'rot als Zeichenkette'],
+      [st.x, st.y, 1.5, 'rot = 1,5'], [st.x, st.y, null, 'rot = null'], [null, st.y, 0, 'x = null'],
+      [st.x, undefined, 0, 'y fehlt'], [st.x + 0.5, st.y, 0, 'x = halbe Spalte'],
+    ]) {
+      ok(wirft(() => placeCurrent(s, x, y, rot)), `placeCurrent weist ${was} ab`);
+    }
+    eq(JSON.stringify({ n: s.placed.length, phase: s.phase, drawn: s.drawn }), vorher,
+      'abgewiesene Eingaben verändern nichts');
+    placeCurrent(s, st.x, st.y, st.rots[0]);
+    const ereignisse = s.events;
+    for (const [m, was] of [[{ fi: 99 }, 'fi = 99'], [{ fi: -1 }, 'fi = -1'], [{ fi: '0' }, 'fi als Zeichenkette'], [{}, 'fi fehlt']]) {
+      ok(wirft(() => finishTurn(s, m)), `finishTurn weist ${was} ab`);
+    }
+    eq(s.phase, 'meeple', 'nach abgewiesenem Meeple ist der Zug noch offen');
+    ok(s.events === ereignisse, 'und die Ereignisliste unberührt');
+    finishTurn(s, null);
+    eq(s.phase, 'place', 'der Zug lässt sich danach regulär beenden');
+  }
 }
 
 console.log(`\n${passed} Prüfungen bestanden, ${failed} fehlgeschlagen.`);
