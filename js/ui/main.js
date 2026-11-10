@@ -93,7 +93,19 @@ $('btnContinue').addEventListener('click', () => {
   if (save.settings && Array.isArray(save.settings.players)) {
     for (const p of save.settings.players) p.color = migrateColor(p.color);
   }
-  const s = resumeGame(save);
+  // Ein Spielstand, der sich nicht nachspielen lässt, darf den Knopf nicht
+  // tot machen: vorher warf resumeGame, nichts fing es, und „Weiterspielen"
+  // tat bei jedem Tippen – nichts. Für immer, denn der Spielstand blieb.
+  let s = null;
+  try {
+    s = resumeGame(save);
+  } catch (e) {
+    console.error('Spielstand nicht ladbar', e);
+    store.del('save');
+    refreshMenu();
+    alert('Der Spielstand ließ sich nicht laden und wurde entfernt.');
+    return;
+  }
   if (!s || s.phase === 'over') { store.del('save'); refreshMenu(); return; }
   startGameUI(s);
 });

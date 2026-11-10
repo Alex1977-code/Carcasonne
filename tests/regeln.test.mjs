@@ -13,7 +13,7 @@ import { spreizeSpots, MAX_RUECKUNG } from '../js/ui/spot-layout.js';
 import { festerStapel } from './deck.mjs';
 import {
   newGame, isLegal, legalPlacementsFor, placeCurrent, meepleOptions,
-  meepleBesetzt, finishTurn, find, key,
+  meepleBesetzt, finishTurn, find, key, serialize, resumeGame, REGELSTAND,
 } from '../js/engine/game.js';
 
 let failed = 0, passed = 0;
@@ -1299,6 +1299,48 @@ console.log('=== 23. Kartendaten, Fluss und Eingaben ===');
     eq(abwurf, 0, 'keine Flusskarte wird abgeworfen');
     eq(ohneSee, 0, 'jeder Fluss endet im See');
     console.log(`   ${partien} Flussläufe, ${karten} Flusskarten gelegt`);
+  }
+
+  // --- Alte Spielstände ----------------------------------------------------
+  // Die Regel oben ist strenger als die alte, und ein Spielstand ist eine
+  // Zugfolge, die beim Laden nachgespielt wird. Eine Partie mit einer Kehre
+  // im Fluss muss sich weiter öffnen lassen – und nach ihren Regeln zu
+  // Ende gehen.
+  {
+    const alt = newGame({ ...zwei({
+      deckIds: ['RV_CURVE', 'RV_STRAIGHT', 'RV_CURVE', 'RV_LAKE', 'U', 'U'], startId: 'RV_SPRING',
+    }), expansions: { river: true }, regelstand: 1 });
+    const wasser = (p) => [0, 1, 2, 3].filter((d) => edgeAt(p.defId, p.rot, d) === 'W');
+    const d0 = wasser(alt.placed[0])[0];
+    let st = legalPlacementsFor(alt, alt.drawn);
+    placeCurrent(alt, st[0].x, st[0].y, st[0].rots[0]); finishTurn(alt, null);
+    const d1 = wasser(alt.placed[1]).find((d) => d !== opp(d0));
+    st = legalPlacementsFor(alt, alt.drawn);
+    placeCurrent(alt, st[0].x, st[0].y, st[0].rots[0]); finishTurn(alt, null);
+    const p2 = alt.placed[2];
+    const x = p2.x + DIRS[d1].dx, y = p2.y + DIRS[d1].dy;
+    let kehre = -1;
+    for (let rot = 0; rot < 4; rot++) {
+      const w = [0, 1, 2, 3].filter((d) => edgeAt('RV_CURVE', rot, d) === 'W');
+      if (w.includes(opp(d1)) && w.includes(opp(d0))) kehre = rot;
+    }
+    ok(isLegal(alt, 'RV_CURVE', x, y, kehre), 'nach altem Stand ist die Kehre erlaubt');
+    placeCurrent(alt, x, y, kehre); finishTurn(alt, null);
+    const stand = serialize(alt);
+    eq(stand.regelstand, 1, 'der Spielstand nennt seinen Regelstand');
+    delete stand.regelstand;                 // so sieht ein Spielstand von früher aus
+    let geladen = null, fehler = null;
+    try { geladen = resumeGame(JSON.parse(JSON.stringify(stand))); } catch (e) { fehler = e; }
+    ok(!fehler, `ein alter Spielstand mit Kehre lässt sich laden${fehler ? ' – ' + fehler.message : ''}`);
+    eq(geladen && geladen.placed.length, alt.placed.length, 'mit allen Karten');
+    eq(geladen && geladen.regelstand, 1, 'und bleibt beim alten Regelstand');
+    eq(geladen && geladen.drawn, alt.drawn, 'dieselbe Karte ist gezogen');
+
+    const neu = newGame(zwei({ deckIds: ['U', 'U'], startId: 'D' }));
+    eq(neu.regelstand, REGELSTAND, 'eine neue Partie spielt nach dem aktuellen Stand');
+    eq(serialize(neu).regelstand, REGELSTAND, 'und speichert ihn');
+    const wieder = resumeGame(JSON.parse(JSON.stringify(serialize(neu))));
+    eq(wieder.regelstand, REGELSTAND, 'der beim Laden erhalten bleibt');
   }
 
   // --- Eingaben ------------------------------------------------------------
