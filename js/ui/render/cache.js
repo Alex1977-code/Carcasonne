@@ -92,6 +92,23 @@ export class TileCache {
     return done;
   }
 
+  /**
+   * Genau diesen Eintrag jetzt rendern und zurückgeben – an der
+   * Warteschlange und an einer eingefrorenen Zoom-Geste vorbei.
+   *
+   * Der Umweg „anfordern, dann einen Auftrag abarbeiten" lieferte nicht
+   * immer das Verlangte: stand der Auftrag schon mit kleinerer Dringlichkeit
+   * in der Schlange, blieb er dort, abgearbeitet wurde ein anderer, und der
+   * Aufrufer bekam `null`. `drawImage(null)` wirft – und damit endete die
+   * Bildschleife, bis zum Neuladen.
+   */
+  renderNow(tileTypeId, variant, rotation, lod, drawFn) {
+    const key = TileCache.key(tileTypeId, variant, rotation, lod);
+    const i = this.queue.findIndex((q) => q.key === key);
+    if (i >= 0) this.queue.splice(i, 1);
+    return this._render({ key, tileTypeId, variant, rotation, lod, priority: 0 }, drawFn);
+  }
+
   _render(job, drawFn) {
     const size = renderSizeFor(job.lod);
     const px = Math.round(size * this.dpr);
@@ -108,6 +125,8 @@ export class TileCache {
     this.entries.set(job.key, { canvas, size: px, lastUsed: ++this.clock });
     this.stats.renders++;
     this._evict();
+    // Das Bitmap selbst, nicht der Eintrag: der kann eben verdrängt worden sein.
+    return canvas;
   }
 
   _evict() {

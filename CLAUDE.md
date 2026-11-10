@@ -272,6 +272,54 @@ eine dünnere Scheibe oder ein flacherer Blick. Und die Überdeckung mit
 ein flacher Umriss nie abdeckt. Beides steht deshalb als Anmerkung da,
 nicht als Beanstandung.
 
+## Bedienung und Layout: nachstellen, nicht ansehen
+
+Die Suiten unter `tests/` prüfen die Regeln, und die hielten: 2 560
+Partien, 93 358 Wertungen, keine falsch. Die Fehler saßen dort, wo der
+Browser mitspielt, und dafür gibt es zwei Werkzeuge:
+
+    node tools/bedienung-pruefen.mjs     # 40 Prüfungen, Telefon mit Berührung
+    node tools/layout-pruefen.mjs        # hoch, quer, klein – je sechs Spieler
+    node tools/layout-pruefen.mjs --bilder=/tmp/lay
+
+Beide laufen nicht in der CI (kein Browser). Vor einer Änderung an
+`js/ui/main.js`, `js/ui/render.js` oder `css/style.css` von Hand.
+
+Fünf Dinge, die dabei herausgekommen sind und wiederkommen werden:
+
+* **„Welcher Bildschirm" ist nicht „welche Partie".** Verspätete Schritte
+  (die Pause vor einem KI-Zug, die Fanfare vor der Abrechnung) fragten, ob
+  gerade das Spiel zu sehen ist. Wer während eines KI-Zugs in die Optionen
+  ging, hielt die Partie für immer an. Gefragt wird jetzt nach der
+  Partie-Nummer (`partie`, `spaeter()`).
+* **`getBoundingClientRect()` misst mit Transformation.** Der
+  Spielbildschirm blendet mit `scale(1.015)` ein, und genau dann wurde die
+  Zeichenfläche vermessen: 798 × 1730 statt 786 × 1704, für die ganze
+  Partie. 19 von 72 Gefolgsleuten landeten auf dem falschen Gebiet.
+  Größen kommen aus `clientWidth`/`clientHeight` (`BoardView.groesse()`).
+* **Ein Tipp trifft, was *danach* unter dem Finger liegt.** Auf einem
+  Berührbildschirm wird der Klick erst nach dem Loslassen zugestellt. Ein
+  Knopf, der durch denselben Tipp erscheint, bekommt ihn ab. Deshalb
+  `zeige()`: 350 ms nach dem Erscheinen nimmt ein Knopf nichts an.
+* **Ein Spielstand ist eine Zugfolge.** Beim Laden wird nachgespielt.
+  Jede Regel, die strenger wird, macht alte Spielstände unladbar – so
+  geschehen mit der Flussregel, einen Merge lang. Deshalb trägt jede
+  Partie ihren `regelstand` und behält ihn. **Wer eine Regel ändert,
+  erhöht `REGELSTAND` und lässt die alte unter der alten Nummer gelten.**
+* **Der Speicher gehört nicht uns allein.** Was in `localStorage` steht,
+  hat irgendeine frühere Fassung geschrieben. Jeder Eintrag wird beim
+  Lesen geprüft (`ladeSetup`, `ladeScores`, `istObjekt`); ein Eintrag der
+  falschen Art hat vorher den Start der App abgebrochen.
+
+Eine Beobachtung, die **nicht** behoben ist, weil sie sich nur in der
+Prüfumgebung messen lässt: wird ein Kachel-Bitmap auf die Hälfte oder
+weniger verkleinert gezeichnet, kostet jede Karte dort 0,85 ms statt
+0,002 – bei Maßstab 130 sind das 28 ms je Bild, bei 131 nichts. Die
+Prüfumgebung rechnet ohne Grafikkarte; ob ein Telefon dasselbe tut, weiß
+ich nicht. Ruckelt das Brett am Gerät bei mittlerem Zoom, ist das der
+erste Verdacht (`lodFor(s * dpr)` wählt bei dpr 2 ein doppelt so großes
+Bitmap wie nötig).
+
 ## Neue Bögen einbauen
 
 1. Datei nach `grafik/`

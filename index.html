@@ -132,6 +132,9 @@
     <div id="hud-top">
       <div id="playerChips"></div>
       <div id="deckInfo" title="Verbleibende Karten">▦ <span id="deckCount">0</span></div>
+      <!-- Hängt an der Leiste, nicht am Bildschirm: so steht eine Meldung
+           immer unter den Spielern, wie viele Zeilen die auch brauchen. -->
+      <div id="toasts"></div>
     </div>
     <div id="turnBanner" class="hidden"></div>
     <div id="hud-bottom">
@@ -152,7 +155,6 @@
       <button id="btnGameMenu" class="btn icon round" title="Menü">☰</button>
     </div>
     <div id="netStatus" class="hidden"></div>
-    <div id="toasts"></div>
     <div id="gameMenu" class="modal hidden">
       <div class="modal-box">
         <h3>Pause</h3>

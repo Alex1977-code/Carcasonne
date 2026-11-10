@@ -409,6 +409,33 @@ class BudgetedTileCache extends TileCache {
       this.stats.evictions++;
     }
   }
+
+  /**
+   * Die höchste Stufe bis `wunsch`, bei der alle sichtbaren Karten zugleich
+   * in den Speicher passen.
+   *
+   * Ohne das verdrängen sich die Karten gegenseitig: „large" ist bei dpr 2
+   * ein Bitmap von 520 px, gut 1 MB. Bei 66 bis 72 Punkten je Karte wird
+   * diese Stufe gewählt, auf einem Telefon liegen dann aber bis zu hundert
+   * Karten im Bild – 100 MB gegen eine Grenze von 40. Jedes Bild warf
+   * heraus, was das nächste wieder brauchte: gemessen 146 ms je Bild.
+   * Die Stufe darunter ist bei dieser Größe immer noch doppelt so fein wie
+   * der Bildschirm; zu sehen ist der Unterschied nicht.
+   *
+   * `genutzt` ist die Stufe des letzten Bildes. Sie darf bis 95 % bleiben,
+   * eine andere wird erst unter 80 % betreten – sonst kippt die Wahl beim
+   * Schieben mit jeder Karte, die ins Bild kommt.
+   */
+  tragbar(wunsch, anzahl, genutzt = null) {
+    let i = LOD_ORDER.indexOf(wunsch);
+    for (; i > 0; i--) {
+      const lod = LOD_ORDER[i];
+      const px = Math.round(renderSizeFor(lod) * this.dpr);
+      const anteil = lod === genutzt ? 0.95 : 0.8;
+      if (anzahl * px * px * 4 <= this.maxBytes * anteil && anzahl <= this.maxEntries * anteil) break;
+    }
+    return LOD_ORDER[i];
+  }
 }
 
 const tileCache = new BudgetedTileCache({
@@ -495,15 +522,7 @@ export function tileVariantAt(x, y) {
 export function tileArt(defId, rot = 0, lod = LOD.LARGE, variant = 0) {
   const hit = tileCache.get(defId, variant, rot, lod);
   if (hit) return hit;
-  tileCache.request(defId, variant, rot, lod, 100);
-  const budget = tileCache.budgetPerFrame;
-  tileCache.budgetPerFrame = 1;
-  const wasFrozen = tileCache.frozen;
-  tileCache.frozen = false;
-  tileCache.drainBudget(drawTileJob);
-  tileCache.budgetPerFrame = budget;
-  tileCache.frozen = wasFrozen;
-  return tileCache.get(defId, variant, rot, lod);
+  return tileCache.renderNow(defId, variant, rot, lod, drawTileJob);
 }
 
 /**
@@ -1563,18 +1582,52 @@ export class BoardView {
     this.lod = null;          // aktuelle Detailstufe, mit Hysterese
   }
 
+  /**
+   * Den Zeichenzustand verwerfen. Nach einem Fehler mitten im Bild liegt
+   * ein `save` ohne `restore` auf dem Stapel; jedes weitere Bild würde um
+   * den Maßstab versetzt gezeichnet.
+   */
+  zuruecksetzen() {
+    if (typeof this.ctx.reset === 'function') this.ctx.reset();
+    else this.canvas.width = this.canvas.width;   // setzt ebenfalls alles zurück
+  }
+
   /** Während einer Zoom-Geste nichts Neues rendern (Nachtrag §10.3). */
   freezeCache() { tileCache.freeze(); }
   thawCache() { tileCache.thaw(); }
 
+  /**
+   * Die Größe der Zeichenfläche in CSS-Punkten – ohne Transformationen.
+   *
+   * Hier stand überall `getBoundingClientRect()`. Das misst, was auf dem
+   * Bildschirm ankommt, also *mit* der Einblendung des Spielbildschirms
+   * (`scale(1.015)`). Die Partie beginnt genau in dieser Einblendung: das
+   * Bitmap wurde 798 × 1730 groß angelegt, die Fläche ist 786 × 1704, und
+   * dabei blieb es für die ganze Partie. Alles Gezeichnete lag danach
+   * anderthalb Prozent neben dem, was die Tipp-Umrechnung annahm – am Rand
+   * des Bretts 10 bis 15 Punkte, und 19 von 72 Gefolgsleuten landeten auf
+   * dem falschen Gebiet.
+   *
+   * Ist die Fläche gar nicht eingeblendet, gilt die letzte bekannte Größe.
+   */
+  groesse() {
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (w > 0 && h > 0) this._groesse = { width: w, height: h };
+    return this._groesse || { width: 1, height: 1 };
+  }
+
   resize() {
-    const r = this.canvas.getBoundingClientRect();
-    this.canvas.width = Math.round(r.width * this.dpr);
-    this.canvas.height = Math.round(r.height * this.dpr);
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (!(w > 0 && h > 0)) return;      // nicht eingeblendet: nichts anfassen
+    this._groesse = { width: w, height: h };
+    const bw = Math.round(w * this.dpr), bh = Math.round(h * this.dpr);
+    // Nur bei echter Änderung: das Setzen löscht die Fläche.
+    if (this.canvas.width !== bw) this.canvas.width = bw;
+    if (this.canvas.height !== bh) this.canvas.height = bh;
   }
 
   worldToScreen(wx, wy) {
-    const r = this.canvas.getBoundingClientRect();
+    const r = this.groesse();
     return [
       (wx - this.cam.x) * this.cam.scale + r.width / 2,
       (wy - this.cam.y) * this.cam.scale + r.height / 2,
@@ -1582,7 +1635,7 @@ export class BoardView {
   }
 
   screenToWorld(sx, sy) {
-    const r = this.canvas.getBoundingClientRect();
+    const r = this.groesse();
     return [
       (sx - r.width / 2) / this.cam.scale + this.cam.x,
       (sy - r.height / 2) / this.cam.scale + this.cam.y,
@@ -1601,7 +1654,7 @@ export class BoardView {
       minX = Math.min(minX, x); maxX = Math.max(maxX, x);
       minY = Math.min(minY, y); maxY = Math.max(maxY, y);
     }
-    const r = this.canvas.getBoundingClientRect();
+    const r = this.groesse();
     const w = maxX - minX + 3, h = maxY - minY + 3;
     const scale = Math.min(140, Math.max(14, Math.min(r.width / w, r.height / h)));
     const tx = (minX + maxX) / 2, ty = (minY + maxY) / 2;
@@ -1617,7 +1670,13 @@ export class BoardView {
     if (this.camTarget) {
       const t = this.camTarget, c = this.cam, k = 0.16;
       c.x += (t.x - c.x) * k; c.y += (t.y - c.y) * k; c.scale += (t.scale - c.scale) * k;
-      if (Math.abs(t.x - c.x) < 0.005 && Math.abs(t.scale - c.scale) < 0.3) this.camTarget = null;
+      // Alle drei Größen. Ohne y endete die Fahrt, sobald x und der Maßstab
+      // angekommen waren – bei einem hohen, schmalen Brett mitten im Weg.
+      if (Math.abs(t.x - c.x) < 0.005 && Math.abs(t.y - c.y) < 0.005
+          && Math.abs(t.scale - c.scale) < 0.3) {
+        this.cam = { x: t.x, y: t.y, scale: t.scale };
+        this.camTarget = null;
+      }
       return true;
     }
     return false;
@@ -1625,7 +1684,7 @@ export class BoardView {
 
   render(state, view = {}) {
     const ctx = this.ctx;
-    const r = this.canvas.getBoundingClientRect();
+    const r = this.groesse();
     ctx.save();
     ctx.scale(this.dpr, this.dpr);
 
@@ -1666,18 +1725,31 @@ export class BoardView {
     }
     // Karten – Detailstufe folgt der Bildschirmgröße, mit Hysterese
     this.lod = lodFor(s * this.dpr, this.lod);
+    // Außerhalb des Sichtfelds nichts anfordern. Eine Karte reicht eine
+    // halbe Breite um ihre Mitte; 0,65 lässt Platz für die Einblendung der
+    // eben gelegten (Faktor 1,25). Hier stand eine ganze Breite – das waren
+    // rundum zwei Reihen Karten, die niemand sah und die trotzdem Speicher
+    // belegten.
+    const rand = s * 0.65;
+    const sichtbar = [];
     for (const [, idx] of state.grid) {
       const p = state.placed[idx];
       const [sx, sy] = this.worldToScreen(p.x, p.y);
-      // außerhalb des Sichtfelds nichts anfordern
-      if (sx < -s || sy < -s || sx > r.width + s || sy > r.height + s) continue;
+      if (sx < -rand || sy < -rand || sx > r.width + rand || sy > r.height + rand) continue;
+      sichtbar.push([idx, sx, sy]);
+    }
+    // … und nur so fein, wie alle sichtbaren Karten zusammen in den
+    // Speicher passen.
+    this.stufe = tileCache.tragbar(this.lod, sichtbar.length, this.stufe);
+    for (const [idx, sx, sy] of sichtbar) {
+      const p = state.placed[idx];
       let scale = 1;
       if (view.anim && view.anim.placedIdx === idx) {
         const t = Math.min(1, (now - view.anim.t0) / 260);
         scale = 1 + (1 - t) * 0.25;
         ctx.globalAlpha = 0.4 + 0.6 * t;
       }
-      const art = tileArtProgressive(p.defId, p.rot, this.lod, tileVariantAt(p.x, p.y));
+      const art = tileArtProgressive(p.defId, p.rot, this.stufe, tileVariantAt(p.x, p.y));
       const ds = s * scale;
       ctx.drawImage(art, sx - ds / 2, sy - ds / 2, ds, ds);
       ctx.globalAlpha = 1;
@@ -1703,7 +1775,7 @@ export class BoardView {
       const { x, y, rot, valid } = view.sel;
       const [sx, sy] = this.worldToScreen(x, y);
       ctx.globalAlpha = 0.93;
-      const art = tileArtProgressive(view.sel.defId, rot, this.lod || LOD.NORMAL, tileVariantAt(x, y));
+      const art = tileArtProgressive(view.sel.defId, rot, this.stufe || LOD.NORMAL, tileVariantAt(x, y));
       ctx.drawImage(art, sx - s / 2, sy - s / 2, s, s);
       ctx.globalAlpha = 1;
       ctx.lineWidth = 2;
