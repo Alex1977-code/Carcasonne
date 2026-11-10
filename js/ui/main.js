@@ -14,6 +14,7 @@ import { sfx, applySoundOptions, unlockAudio, startMusic, stopMusic, soundState 
 import { Net } from './net.js';
 import { PLAYER_HEXES, PLAYER_NAMES } from './render/meeple-colors.js';
 import { startBackdrop } from './render/backdrop.js';
+import { onPaintingLoaded } from './render/paintings.js';
 import { shadowOffset } from './render/ambience.js';
 
 const $ = (id) => document.getElementById(id);
@@ -39,7 +40,14 @@ const store = {
   del(k) { try { localStorage.removeItem('carc.' + k); } catch { /* egal */ } },
 };
 
-let options = Object.assign({ sfx: true, music: true, hints: true, anim: true }, store.get('options', {}));
+// Was im Speicher steht, hat irgendwann irgendeine Fassung dieser App
+// geschrieben – oder der Speicher war voll und der Eintrag ist halb. Ein
+// Eintrag der falschen Art (Zahl, Text, Liste statt Objekt) hat den Start
+// der App abgebrochen, und dann half nur noch, die Websitedaten zu löschen.
+const istObjekt = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const alsObjekt = (v) => (istObjekt(v) ? v : {});
+
+let options = Object.assign({ sfx: true, music: true, hints: true, anim: true }, alsObjekt(store.get('options', {})));
 applySoundOptions(options);
 
 // ---------- Screens ----------
@@ -59,6 +67,7 @@ function showScreen(name) {
   document.body.classList.toggle('in-game', name === 'game');
   if (name === 'menu') refreshMenu();
   if (name === 'scores') renderScores();
+  if (name === 'game') zurueckInsSpiel();
 }
 document.querySelectorAll('[data-back]').forEach(b =>
   b.addEventListener('click', () => {
@@ -79,8 +88,9 @@ window.addEventListener('pointerdown', function unlock() {
 // ============================================================
 function refreshMenu() {
   const save = store.get('save', null);
-  $('btnContinue').classList.toggle('hidden', !save);
-  if (save) $('btnContinue').textContent = `▶ Weiterspielen (Zug ${save.turn})`;
+  const da = istObjekt(save);
+  $('btnContinue').classList.toggle('hidden', !da);
+  if (da) $('btnContinue').textContent = `▶ Weiterspielen (Zug ${Number(save.turn) || 1})`;
 }
 $('btnNew').addEventListener('click', () => { sfx.click(); backTarget = 'menu'; showScreen('setup'); });
 $('btnScores').addEventListener('click', () => { sfx.click(); backTarget = 'menu'; showScreen('scores'); });
@@ -89,7 +99,7 @@ $('btnHelp').addEventListener('click', () => { sfx.click(); backTarget = 'menu';
 $('btnContinue').addEventListener('click', () => {
   sfx.click();
   const save = store.get('save', null);
-  if (!save) return;
+  if (!istObjekt(save)) { store.del('save'); refreshMenu(); return; }
   if (save.settings && Array.isArray(save.settings.players)) {
     for (const p of save.settings.players) p.color = migrateColor(p.color);
   }
@@ -153,15 +163,64 @@ function drawMenuTiles(ctx, w, h, candle) {
 // ============================================================
 // Setup-Screen
 // ============================================================
-let setup = Object.assign({
-  players: [
-    { name: 'Anna', color: 0, type: 'human' },
-    { name: 'KI Ritter', color: 1, type: 'ai2' },
-  ],
-  expansions: { river: false, inns: false, king: false },
-  deckScale: 1,
-}, store.get('setup', {}));
-if (![1, 2, 4].includes(setup.deckScale)) setup.deckScale = 1;
+const SPIELER_ARTEN = ['human', 'ai1', 'ai2', 'ai3'];
+
+/**
+ * Die gespeicherte Aufstellung, geprüft Feld für Feld.
+ *
+ * Vorher wurde sie ungeprüft über die Vorgabe gelegt. Fehlte `expansions`
+ * oder war `players` keine Liste, brach die App beim Start ab. Und nach
+ * einer Online-Partie als Gastgeber stand hier ein einzelner Spieler – die
+ * nächste lokale Partie begann dann allein.
+ */
+function ladeSetup() {
+  const roh = alsObjekt(store.get('setup', {}));
+  const players = [];
+  if (Array.isArray(roh.players)) {
+    for (const p of roh.players.slice(0, 6)) {
+      if (!istObjekt(p)) continue;
+      const color = Number.isInteger(p.color) && p.color >= 0 && p.color < COLORS.length ? p.color : -1;
+      players.push({
+        name: typeof p.name === 'string' ? p.name.slice(0, 14) : '',
+        color,
+        type: SPIELER_ARTEN.includes(p.type) ? p.type : 'ai2',
+      });
+    }
+  }
+  // Farben: jede nur einmal, fehlende aus dem Rest
+  const benutzt = new Set();
+  for (const p of players) {
+    if (p.color < 0 || benutzt.has(p.color)) p.color = COLORS.findIndex((_, i) => !benutzt.has(i));
+    benutzt.add(p.color);
+  }
+  const ex = alsObjekt(roh.expansions);
+  const s = {
+    players,
+    expansions: { river: !!ex.river, inns: !!ex.inns, king: !!ex.king },
+    deckScale: [1, 2, 4].includes(roh.deckScale) ? roh.deckScale : 1,
+  };
+  mindestensZwei(s);
+  return s;
+}
+
+/** Eine lokale Partie braucht zwei Spieler. Fehlende werden ergänzt. */
+function mindestensZwei(s) {
+  const vorgabe = [
+    { name: 'Anna', type: 'human' },
+    { name: 'KI Ritter', type: 'ai2' },
+  ];
+  while (s.players.length < 2) {
+    const benutzt = s.players.map((p) => p.color);
+    const v = vorgabe[s.players.length];
+    s.players.push({
+      name: s.players.some((p) => p.name === v.name) ? DEFAULT_NAMES[s.players.length] : v.name,
+      color: COLORS.findIndex((_, i) => !benutzt.includes(i)),
+      type: s.players.length === 0 ? 'human' : v.type,
+    });
+  }
+}
+
+let setup = ladeSetup();
 
 // Online-Zustand (null = lokales Spiel)
 // { role:'host'|'guest', net, remotes:[{connId,name}], myIdx, started }
@@ -297,6 +356,7 @@ $('btnStart').addEventListener('click', () => {
     startOnlineGame();
     return;
   }
+  if (setup.players.length < 2) { toastSetup('Mindestens 2 Spieler nötig'); return; }
   const s = newGame({
     players: setup.players.map(p => ({ name: p.name.trim(), color: COLORS[p.color], type: p.type })),
     expansions: { ...setup.expansions },
@@ -443,6 +503,8 @@ function teardownOnline() {
   $('onlineOff').classList.remove('hidden');
   $('onlineHost').classList.add('hidden');
   $('joinModal').classList.add('hidden');
+  // Als Gastgeber genügt ein lokaler Spieler; ohne Raum nicht mehr.
+  mindestensZwei(setup);
   renderPlayerRows();
 }
 
@@ -595,10 +657,14 @@ function remotePlayerLost(gone) {
   const p = G.players[idx];
   if (p && p.type === 'remote') {
     p.type = 'ai2';
+    // Auch im Stand für „Zurück": der wird sonst wieder eingesetzt, der
+    // Spieler ist dann erneut „online", und die Partie wartet auf jemanden,
+    // der nicht mehr da ist.
+    if (ui.undoSnap && ui.undoSnap.players[idx]) ui.undoSnap.players[idx].type = 'ai2';
     toast(`${p.name} hat die Verbindung verloren – die KI übernimmt`, '#7cc4ff');
     if (G.current === idx && G.phase === 'place' && !ui.aiBusy) {
       ui.aiBusy = true;
-      setTimeout(aiTurn, 600);
+      spaeter(aiTurn, 600);
     }
     updateHud();
   }
@@ -612,8 +678,36 @@ let G = null;              // Engine-Zustand
 let ui = null;             // UI-Zustand des laufenden Spiels
 let rafActive = false;
 
+// Jede Partie bekommt eine Nummer. Alles, was später fertig wird – die
+// Pause vor einem KI-Zug, die Fanfare vor der Abrechnung –, prüft daran, ob
+// es noch um dieselbe Partie geht. Vorher wurde gefragt, ob gerade der
+// Spielbildschirm zu sehen ist. Das ist eine andere Frage: wer während eines
+// KI-Zugs in die Optionen ging, hielt die Partie für immer an, und wer nach
+// der letzten Karte aufgab, bekam anderthalb Sekunden später die Abrechnung
+// einer Partie, die es nicht mehr gab.
+let partie = 0;
+/** Wie setTimeout, aber nur, wenn dann noch dieselbe Partie läuft. */
+function spaeter(fn, ms) {
+  const nr = partie;
+  setTimeout(() => { if (G && nr === partie) fn(); }, ms);
+}
+
+/** Zurück auf dem Spielbildschirm – aus den Optionen oder zum ersten Mal. */
+function zurueckInsSpiel() {
+  if (!G || !ui) return;
+  $('gameMenu').classList.add('hidden');
+  // Die Fläche kann inzwischen eine andere Größe haben (gedreht), und die
+  // Bildschleife hat sich beim Verlassen beendet. Ohne beides blieb das
+  // Brett nach den Optionen stehen: man spielte blind weiter.
+  board.resize();
+  startLoop();
+  updateHud();
+  if (ui.endeOffen) { ui.endeOffen = false; showEndScreen(); }
+}
+
 function startGameUI(state) {
   G = state;
+  partie++;
   netQueue.length = 0;
   ui = {
     sel: null,             // gewählte Zelle {x,y,rot}
@@ -627,12 +721,10 @@ function startGameUI(state) {
     aiBusy: false,
     over: false,
   };
-  showScreen('game');
-  board.resize();
-  board.centerOn(G);
   renderChips();
+  showScreen('game');
+  board.centerOn(G);
   updateHud();
-  startLoop();
   if (G.phase === 'meeple') {
     // Fortgesetztes Spiel mitten in Meeple-Phase gibt es nicht (Autosave nach Zügen)
     G.phase = 'place';
@@ -644,6 +736,9 @@ function startGameUI(state) {
 function renderChips() {
   const wrap = $('playerChips');
   wrap.innerHTML = '';
+  // Ab vier Spielern zwei Spalten. Untereinander nahmen sechs Leisten auf
+  // einem kleinen Telefon 43 % der Höhe ein – fast das halbe Brett.
+  wrap.classList.toggle('eng', G.players.length >= 4);
   G.players.forEach(p => {
     const chip = document.createElement('div');
     chip.className = 'chip';
@@ -677,18 +772,43 @@ function updateHud() {
   $('tileDock').classList.toggle('hidden', !G.drawn);
   drawPreview($('preview'), G.drawn, ui.sel ? ui.sel.rot : previewRot);
   $('btnRotate').classList.toggle('hidden', !humanTurn || G.phase !== 'place');
-  $('btnConfirm').classList.toggle('hidden', !(humanTurn && G.phase === 'place' && ui.sel && ui.sel.valid));
+  zeige($('btnConfirm'), humanTurn && G.phase === 'place' && !!ui.sel && ui.sel.valid);
   const meeplePhase = humanTurn && G.phase === 'meeple';
-  $('btnSkipMeeple').classList.toggle('hidden', !meeplePhase);
-  $('btnUndo').classList.toggle('hidden', !meeplePhase || !ui.undoSnap);
+  zeige($('btnSkipMeeple'), meeplePhase);
+  zeige($('btnUndo'), meeplePhase && !!ui.undoSnap);
   const pl = G.players[G.current];
-  $('btnBigMeeple').classList.toggle('hidden', !(meeplePhase && pl.bigMeeples > 0 && pl.meeples > 0));
+  zeige($('btnBigMeeple'), meeplePhase && pl.bigMeeples > 0 && pl.meeples > 0);
   $('btnBigMeeple').classList.toggle('on', ui.bigNext);
   $('btnMute').textContent = '♫';
   $('btnMute').classList.toggle('muted', !(soundState.sfx || soundState.music));
 }
 
 const isHumanTurn = () => G && G.phase !== 'over' && G.players[G.current].type === 'human';
+
+// Ein Knopf, der eben erst erschienen ist, nimmt noch keinen Tipp an.
+//
+// Auf einem Berührbildschirm wird der „Klick" erst nach dem Loslassen
+// zugestellt – und zwar an das, was *dann* unter dem Finger liegt. Wer ein
+// Feld am unteren Rand antippte, wählte es aus, „Legen" erschien unter dem
+// Finger und bekam denselben Tipp: die Karte lag, ohne dass man gedreht
+// hätte. Und „Kein Meeple" erscheint an derselben Stelle, an der eben noch
+// „Legen" stand – ein doppelter Tipp legte die Karte und verschenkte den
+// Gefolgsmann.
+const ERSCHEINEN_MS = 350;
+const erschienen = new WeakMap();
+function zeige(el, sichtbar) {
+  if (sichtbar && el.classList.contains('hidden')) erschienen.set(el, performance.now());
+  el.classList.toggle('hidden', !sichtbar);
+}
+document.addEventListener('click', (e) => {
+  const knopf = e.target.closest ? e.target.closest('button') : null;
+  if (!knopf) return;
+  const seit = erschienen.get(knopf);
+  if (seit !== undefined && performance.now() - seit < ERSCHEINEN_MS) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }
+}, true);
 
 function toast(text, color = '#ffd58a') {
   const t = document.createElement('div');
@@ -716,31 +836,46 @@ function showTurnBanner() {
 function startLoop() {
   if (rafActive) return;
   rafActive = true;
+  let gemeldet = false;
   const frame = (now) => {
     if (currentScreen !== 'game' || !G) { rafActive = false; return; }
-    board.tick();
-    const humanPlace = isHumanTurn() && G.phase === 'place';
-    const view = {
-      now,
-      legal: humanPlace && options.hints ? legalPlacements(G) : null,
-      sel: ui.sel && G.drawn && G.phase === 'place' ? { ...ui.sel, defId: G.drawn } : null,
-      meepleSpots: ui.meeple ? ui.meeple.spots : null,
-      meepleBesetzt: ui.meeple ? ui.meeple.besetzt : null,
-      floaters: ui.floaters,
-      wertungen: ui.wertungen,
-      lastPlaced: ui.lastPlaced,
-      anim: options.anim ? ui.anim : null,
-      calm: !options.anim,      // ohne Animationen brennt die Kerze ruhig
-    };
-    board.render(G, view);
-    ui.floaters = ui.floaters.filter(f => now - f.t0 < 1700);
-    ui.wertungen = ui.wertungen.filter(w => now - w.t0 < 2600);
+    // Ein Bild, das nicht gelingt, darf nicht das letzte sein. Vorher stand
+    // die Anforderung des nächsten Bildes am Ende dieser Funktion: jeder
+    // Fehler davor – ein einziges fehlendes Bitmap genügte – beendete die
+    // Schleife, und das Brett stand bis zum Neuladen still.
+    try {
+      board.tick();
+      const humanPlace = isHumanTurn() && G.phase === 'place';
+      const view = {
+        now,
+        legal: humanPlace && options.hints ? legalPlacements(G) : null,
+        sel: ui.sel && G.drawn && G.phase === 'place' ? { ...ui.sel, defId: G.drawn } : null,
+        meepleSpots: ui.meeple ? ui.meeple.spots : null,
+        meepleBesetzt: ui.meeple ? ui.meeple.besetzt : null,
+        floaters: ui.floaters,
+        wertungen: ui.wertungen,
+        lastPlaced: ui.lastPlaced,
+        anim: options.anim ? ui.anim : null,
+        calm: !options.anim,      // ohne Animationen brennt die Kerze ruhig
+      };
+      board.render(G, view);
+      ui.floaters = ui.floaters.filter(f => now - f.t0 < 1700);
+      ui.wertungen = ui.wertungen.filter(w => now - w.t0 < 2600);
+    } catch (e) {
+      // Der Zeichenzustand kann mitten im Bild stehengeblieben sein
+      // (save ohne restore). Zurücksetzen, sonst wandert jedes weitere Bild.
+      board.zuruecksetzen();
+      if (!gemeldet) { gemeldet = true; console.error('Bild nicht gezeichnet', e); }
+    }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
 }
 
 window.addEventListener('resize', () => { board.resize(); });
+// Trifft eine gemalte Karte erst jetzt ein, zeigt die Ablage noch die
+// gezeichnete – sie wird nur bei Zustandswechseln neu gemalt.
+onPaintingLoaded((id) => { if (G && G.drawn === id) updateHudSafe(); });
 
 // ---------- Ereignisse aus der Engine ----------
 const FTYPE_NAME = { road: 'Straße', city: 'Stadt', mon: 'Kloster', field: 'Wiese' };
@@ -814,24 +949,32 @@ function nextTurnFlow(first = false) {
     setNetStatus(null);
     ui.aiBusy = true;
     updateHud();
-    setTimeout(aiTurn, first ? 650 : 500);
+    spaeter(aiTurn, first ? 650 : 500);
   }
 }
 
 // Führt einen konkreten Zug mit Animation aus (KI oder Netzwerk)
 async function playMove(mv, origin = null) {
+  // Gefragt wird nach der Partie, nicht nach dem Bildschirm: der Zug läuft
+  // auch zu Ende, wenn inzwischen die Optionen offen sind. Im Netzspiel muss
+  // er das ohnehin – die anderen warten nicht.
+  const nr = partie;
+  const lebt = () => G && nr === partie;
   ui.sel = { x: mv.x, y: mv.y, rot: mv.rot, valid: true };
   ensureVisible(mv.x, mv.y);
   updateHud();
   await wait(options.anim ? 600 : 120);
-  if (!G || currentScreen !== 'game') return;
+  if (!lebt()) return;
   ui.sel = null;
   try {
     placeCurrent(G, mv.x, mv.y, mv.rot);
   } catch (e) {
-    // Desync-Schutz: sollte nie passieren
+    // Ein Zug aus dem Netz, der hier nicht passt. Verwerfen und weiter
+    // warten – vorher blieb die Partie an dieser Stelle hängen.
     console.error('Zug nicht anwendbar', mv, e);
     ui.aiBusy = false;
+    updateHud();
+    pumpNet();
     return;
   }
   ui.lastPlaced = G.lastPlacedIdx;
@@ -839,7 +982,7 @@ async function playMove(mv, origin = null) {
   sfx.place();
   updateHud();
   await wait(options.anim ? 420 : 80);
-  if (!G || currentScreen !== 'game') return;
+  if (!lebt()) return;
   if (mv.meeple) sfx.meeple();
   finishTurnSafe(mv.meeple, origin);
 }
@@ -890,7 +1033,7 @@ function autosave() {
 function ensureVisible(x, y) {
   if (!options.anim) return;
   const [sx, sy] = board.worldToScreen(x, y);
-  const r = board.canvas.getBoundingClientRect();
+  const r = board.groesse();
   const m = 90;
   if (sx < m || sy < m || sx > r.width - m || sy > r.height - m || board.cam.scale < 40) {
     board.camTarget = { x, y, scale: Math.max(board.cam.scale, 64) };
@@ -910,10 +1053,14 @@ bc.addEventListener('pointerdown', (e) => {
     dragStart = { x: e.clientX, y: e.clientY, camX: board.cam.x, camY: board.cam.y };
   } else if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
+    const mid = [(a.x + b.x) / 2, (a.y + b.y) / 2];
     pinchStart = {
-      dist: Math.hypot(a.x - b.x, a.y - b.y),
+      // Nie null: zwei Finger auf demselben Punkt ergäben sonst 0/0, der
+      // Maßstab wäre keine Zahl mehr und das Brett bis zum Neuladen leer.
+      dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
       scale: board.cam.scale,
-      mid: [(a.x + b.x) / 2, (a.y + b.y) / 2],
+      // Der Punkt des Bretts unter den Fingern. Er bleibt dort.
+      welt: board.screenToWorld(mid[0], mid[1]),
     };
     dragStart = null;
   }
@@ -936,8 +1083,15 @@ bc.addEventListener('pointermove', (e) => {
     const [a, b] = [...pointers.values()];
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
     const ns = Math.min(200, Math.max(14, pinchStart.scale * dist / pinchStart.dist));
+    if (!Number.isFinite(ns)) return;
     board.camTarget = null;
     board.cam.scale = ns;
+    // Um die Finger zoomen, nicht um die Bildmitte – und mit beiden Fingern
+    // schieben. Vorher zog das Brett beim Vergrößern unter den Fingern weg.
+    const r = board.groesse();
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    board.cam.x = pinchStart.welt[0] - (mx - r.width / 2) / ns;
+    board.cam.y = pinchStart.welt[1] - (my - r.height / 2) / ns;
   }
 });
 function pointerEnd(e) {
@@ -1120,9 +1274,13 @@ $('btnToOptions').addEventListener('click', () => {
 $('btnQuit').addEventListener('click', () => {
   sfx.click();
   $('gameMenu').classList.add('hidden');
+  // Der Spielstand gehört zur lokalen Partie. Online-Partien werden nicht
+  // gespeichert – wer eine aufgab, löschte hier die lokale, die noch auf
+  // „Weiterspielen" wartete.
   if (online) teardownOnline();
-  store.del('save');
+  else store.del('save');
   G = null;
+  partie++;
   setNetStatus(null);
   showScreen('menu');
 });
@@ -1136,11 +1294,22 @@ function endGame() {
   autosave();
   updateHud();
   sfx.fanfare();
-  setTimeout(showEndScreen, options.anim ? 1800 : 400);
+  // Nur, wenn dann noch diese Partie läuft – und nicht mitten in die
+  // Optionen hinein: dann wartet die Abrechnung, bis man zurück ist.
+  spaeter(() => {
+    if (currentScreen === 'game') showEndScreen();
+    else ui.endeOffen = true;
+  }, options.anim ? 1800 : 400);
 }
 
 function showEndScreen() {
+  if (!G) return;
+  $('gameMenu').classList.add('hidden');
   const sorted = [...G.players].sort((a, b) => b.score - a.score);
+  // Der Platz ist die Zahl derer, die mehr Punkte haben, plus eins. Vorher
+  // bekam bei Gleichstand einer „I." und der andere „II.", während darüber
+  // „Unentschieden" stand.
+  const platz = (p) => G.players.filter((q) => q.score > p.score).length;
   const winners = G.winners.map(i => G.players[i].name);
   $('endWinner').textContent =
     winners.length > 1 ? `Unentschieden: ${winners.join(' & ')}!` : `${winners[0]} gewinnt!`;
@@ -1148,9 +1317,9 @@ function showEndScreen() {
   const t = $('endTable');
   t.innerHTML = `
     <thead><tr><th>Spieler</th><th>Straße</th><th>Stadt</th><th>Kloster</th><th>Wiese</th><th>Bonus</th><th>Punkte</th></tr></thead>
-    <tbody>${sorted.map((p, i) => `
+    <tbody>${sorted.map((p) => `
       <tr>
-        <td><span class="pname"><span class="dot" style="background:${p.color}"></span>${medals[i] || ''} ${esc(p.name)}</span></td>
+        <td><span class="pname"><span class="dot" style="background:${esc(p.color)}"></span><span>${medals[platz(p)] || ''} ${esc(p.name)}</span></span></td>
         <td>${p.breakdown.road}</td><td>${p.breakdown.city}</td><td>${p.breakdown.mon}</td>
         <td>${p.breakdown.field}</td><td>${p.breakdown.bonus}</td>
         <td class="total">${p.score}</td>
@@ -1174,31 +1343,43 @@ function expansionTag() {
   if (e.river) tags.push('Fluss');
   if (e.inns) tags.push('W&K');
   if (e.king) tags.push('K&R');
-  if (G.settings.deckScale > 1) tags.push(G.settings.deckScale === 2 ? 'Riesig' : 'Groß');
+  // 2 ist „Groß", 4 ist „Riesig" – so heißen die Knöpfe. Hier stand es
+  // andersherum.
+  if (G.settings.deckScale > 1) tags.push(G.settings.deckScale === 2 ? 'Groß' : 'Riesig');
   return tags.length ? tags.join(' · ') : 'Basisspiel';
 }
 
+/** Die gespeicherte Bestenliste – nur, was wie ein Eintrag aussieht. */
+function ladeScores() {
+  const roh = store.get('scores', []);
+  if (!Array.isArray(roh)) return [];
+  return roh.filter((e) => istObjekt(e) && Number.isFinite(e.score));
+}
+
 function saveHighscores() {
-  const scores = store.get('scores', []);
-  let isNew = false;
+  const scores = ladeScores();
+  const neu = [];
   const date = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
   for (const p of G.players) {
     if (p.type !== 'human') continue;
-    scores.push({
+    const eintrag = {
       name: p.name, score: p.score, date,
       players: G.players.length,
       tag: expansionTag(),
       won: G.winners.includes(p.idx),
-    });
-    isNew = true;
+    };
+    scores.push(eintrag);
+    neu.push(eintrag);
   }
-  if (!isNew) return false;
+  if (!neu.length) return false;
   scores.sort((a, b) => b.score - a.score);
   scores.length = Math.min(scores.length, 25);
   store.set('scores', scores);
-  // War einer der neuen Einträge in den Top 5?
-  const humanScores = G.players.filter(p => p.type === 'human').map(p => p.score);
-  return scores.slice(0, 5).some(s => humanScores.includes(s.score) && G.players.some(p => p.type === 'human' && p.name === s.name));
+  // Steht einer der *neuen* Einträge unter den ersten fünf? Verglichen wird
+  // der Eintrag selbst. Vorher zählten Name und Punktzahl, und dann meldete
+  // jede Partie einen Rekord, in der jemand zufällig so viele Punkte hatte
+  // wie er selbst früher schon einmal.
+  return scores.slice(0, 5).some((s) => neu.includes(s));
 }
 
 $('btnRematch').addEventListener('click', () => {
@@ -1219,7 +1400,7 @@ $('btnEndMenu').addEventListener('click', () => {
 });
 
 function renderScores() {
-  const scores = store.get('scores', []);
+  const scores = ladeScores();
   const list = $('scoreList');
   list.innerHTML = '';
   $('scoreEmpty').classList.toggle('hidden', scores.length > 0);
@@ -1228,8 +1409,8 @@ function renderScores() {
     li.innerHTML = `
       <span class="rank">${i + 1}</span>
       <span class="who"><b>${esc(s.name)} ${s.won ? '⚜' : ''}</b>
-      <em>${s.date} · ${s.players} Spieler · ${esc(s.tag)}</em></span>
-      <span class="pts">${s.score}</span>`;
+      <em>${esc(s.date)} · ${esc(s.players)} Spieler · ${esc(s.tag)}</em></span>
+      <span class="pts">${esc(s.score)}</span>`;
     list.appendChild(li);
   });
 }

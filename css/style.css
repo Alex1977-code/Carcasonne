@@ -88,11 +88,15 @@ body.in-game #vignette { display: none; }
 .btn.toggle.on { background: linear-gradient(180deg, #7a5fd0, #6247b8); box-shadow: 0 3px 0 #43307e; }
 
 /* ---------- Hauptmenü ---------- */
-#screen-menu { align-items: center; justify-content: center; }
+/* Mittig, solange es passt – und rollbar, wenn nicht. Mit
+   justify-content: center ragt zu hoher Inhalt oben *und* unten hinaus,
+   und nach oben lässt sich nicht rollen: im Querformat war die Überschrift
+   abgeschnitten und der unterste Knopf nicht zu erreichen. */
+#screen-menu { align-items: center; justify-content: flex-start; overflow-y: auto; }
 .menu-content {
   position: relative; z-index: 1;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
-  width: 100%; padding: 24px;
+  width: 100%; padding: 24px; margin: auto 0; flex-shrink: 0;
 }
 .logo-wrap { text-align: center; margin-bottom: 18px; }
 .logo {
@@ -130,6 +134,10 @@ body.in-game #vignette { display: none; }
   padding: 14px; display: flex; flex-direction: column; gap: 14px; align-items: stretch;
 }
 .panel-scroll.center { align-items: center; padding-top: calc(24px + env(safe-area-inset-top)); }
+/* Was nicht passt, wird gerollt, nicht gestaucht. Ohne das drückt die
+   Spalte ihre Kinder zusammen: im Querformat blieb von der Abrechnung ein
+   Streifen von 32 px. */
+.panel-scroll > * { flex-shrink: 0; }
 .panel {
   /* Pergament: warmer Grundton mit fleckiger Alterung */
   background:
@@ -322,7 +330,22 @@ body.in-game #vignette { display: none; }
   display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
   pointer-events: none;
 }
-#playerChips { display: flex; flex-wrap: wrap; gap: 6px; }
+#playerChips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+/* Viele Spieler: zwei Spalten, der Name gibt nach. Farbe, Punkte und
+   Gefolgsleute bleiben immer stehen – am Namen erkennt man niemanden, den
+   man nicht schon an der Farbe erkannt hätte. */
+#playerChips.eng {
+  flex: 1; display: grid; gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* Im Querformat ist die Höhe knapp und die Breite da: alle in eine Zeile. */
+@media (min-width: 600px) {
+  #playerChips.eng { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+}
+#playerChips.eng .chip { gap: 5px; padding: 4px 9px 4px 5px; font-size: 0.78rem; min-width: 0; }
+#playerChips.eng .chip .dot { width: 18px; height: 18px; flex-shrink: 0; }
+#playerChips.eng .chip .nm { flex: 1; min-width: 0; max-width: none; }
+#playerChips.eng .chip .pts, #playerChips.eng .chip .mps { flex-shrink: 0; }
 .chip {
   display: flex; align-items: center; gap: 7px;
   background: linear-gradient(180deg, rgba(58,38,20,0.92), rgba(32,20,10,0.92));
@@ -376,6 +399,10 @@ body.in-game #vignette { display: none; }
   box-shadow: 0 4px 10px rgba(0,0,0,0.5);
 }
 #actionDock { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+/* Im Querformat reicht die Seitenleiste bis in die untere Ecke; die Knöpfe
+   lagen dort übereinander, und „Zurück" war unter dem Menüknopf nicht zu
+   treffen. */
+@media (max-height: 500px) { #actionDock { margin-right: 56px; } }
 
 #sideDock {
   position: absolute; right: 10px; top: 50%;
@@ -386,7 +413,10 @@ body.in-game #vignette { display: none; }
 
 /* Toasts */
 #toasts {
-  position: absolute; top: calc(64px + env(safe-area-inset-top));
+  /* Unter der Spielerleiste, wie hoch die auch ist. Hier stand ein fester
+     Abstand von 64 px: bei mehr als zwei Spielern lag die Meldung dann
+     mitten auf den Leisten und verdeckte die Punktzahlen, die sie meldet. */
+  position: absolute; top: 100%;
   left: 50%; transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 6px; align-items: center;
   pointer-events: none; z-index: 6; width: max-content; max-width: 92vw;
@@ -424,11 +454,26 @@ body.in-game #vignette { display: none; }
 /* ---------- Spielende ---------- */
 .end-title { margin: 10px 0 0; font-size: 2rem; }
 .end-winner { color: #f0cd86; font-size: 1.1rem; font-weight: 700; margin: 4px 0 8px; text-align: center; }
-#screen-end .panel { overflow-x: auto; }
+/* Der Rand sitzt in den Zellen, nicht im Rahmen: die stehende Spalte
+   „Punkte" muss bis an die Kante reichen, sonst scheint rechts von ihr
+   durch, was darunter wegrollt. */
+#screen-end .panel { overflow-x: auto; padding-left: 0; padding-right: 0; }
+#endTable th:first-child, #endTable td:first-child { padding-left: 15px; }
 #endTable { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-#endTable th, #endTable td { padding: 7px 6px; text-align: right; }
+#endTable th, #endTable td { padding: 7px 4px; text-align: right; }
 #endTable th:first-child, #endTable td:first-child { text-align: left; }
-#endTable thead th { color: #6f5734; font-weight: 600; font-size: 0.75rem; border-bottom: 1px solid rgba(90,62,32,0.3); }
+#endTable thead th { color: #6f5734; font-weight: 600; font-size: 0.7rem; border-bottom: 1px solid rgba(90,62,32,0.3); }
+/* Die Summe bleibt stehen, auch wenn die Tabelle breiter ist als das
+   Telefon. Vorher war ausgerechnet die Spalte „Punkte" abgeschnitten –
+   die einzige, die jeder sehen will. */
+#endTable th:last-child, #endTable td:last-child {
+  position: sticky; right: 0; padding-left: 8px; padding-right: 15px;
+  background: #e6d3ac; box-shadow: -6px 0 6px -4px rgba(90,62,32,0.35);
+}
+/* Der Name bricht höchstens zwischen Platz und Name um, nie mitten im
+   Wort – sonst gibt die Namensspalte nach, bis ein Buchstabe je Zeile
+   steht. Reicht die Breite nicht, rollt die Tabelle; die Summe bleibt. */
+#endTable .pname > span:last-child { min-width: 4.6em; }
 #endTable tbody tr:not(:last-child) td { border-bottom: 1px solid rgba(90,62,32,0.16); }
 #endTable .total { color: #8a5a16; font-weight: 800; font-size: 1rem; }
 #endTable .pname { display: flex; align-items: center; gap: 7px; font-weight: 700; }
