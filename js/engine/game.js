@@ -34,9 +34,27 @@ function union(s, a, b) {
 // ---------- Neues Spiel ----------
 // settings: { players:[{name,color,type}], expansions:{river,inns,king},
 //             deckScale, deckIds?, startId? (für Replay) }
+/**
+ * Der Stand der Regeln, nach dem eine Partie gespielt wird.
+ *
+ *   1  bis einschließlich Version 25
+ *   2  Fluss darf nicht zurück in Richtung Quelle
+ *
+ * Eine Partie behält den Stand, mit dem sie begonnen wurde. Der Spielstand
+ * ist kein Abbild des Bretts, sondern die Zugfolge, und beim Laden wird sie
+ * nachgespielt: jeder Zug muss dann wieder erlaubt sein, und jede Karte muss
+ * an derselben Stelle abgeworfen werden wie damals. Mit einer strengeren
+ * Regel ist beides nicht mehr sicher – eine alte Fluss-Partie mit einer
+ * Kehre ließ sich nach der Regeländerung nicht mehr öffnen.
+ *
+ * Spielstände ohne Angabe sind von vor der Einführung, also Stand 1.
+ */
+export const REGELSTAND = 2;
+
 export function newGame(settings) {
   const s = {
     settings,
+    regelstand: settings.regelstand ?? REGELSTAND,
     players: settings.players.map((p, i) => ({
       idx: i, name: p.name, color: p.color, type: p.type, // 'human' | 'ai1' | 'ai2' | 'ai3'
       score: 0, meeples: 7, bigMeeples: settings.expansions?.inns ? 1 : 0,
@@ -113,7 +131,7 @@ export function isLegal(s, defId, x, y, rot) {
       // Fließt er nie zurück, ist jede neue Reihe leer, wenn er sie
       // betritt: er kann sich nicht selbst im Weg liegen, und der See
       // passt immer. Nachgerechnet über 6 000 Eröffnungen: kein Abwurf.
-      if (out === flussRueckwaerts(s)) return false;
+      if (s.regelstand >= 2 && out === flussRueckwaerts(s)) return false;
     }
   }
   return true;
@@ -594,6 +612,7 @@ function finalScoring(s) {
 export function cloneState(s) {
   const c = {
     settings: s.settings,
+    regelstand: s.regelstand,
     players: s.players.map(p => ({ ...p, breakdown: { ...p.breakdown } })),
     current: s.current, turn: s.turn, phase: s.phase,
     grid: new Map(s.grid),
@@ -625,6 +644,7 @@ export function cloneState(s) {
 export function serialize(s) {
   return {
     v: 2,
+    regelstand: s.regelstand,
     settings: {
       players: s.settings.players,
       expansions: s.settings.expansions,
@@ -639,7 +659,10 @@ export function serialize(s) {
 
 export function resumeGame(save) {
   if (!save || save.v !== 2) return null;
-  const s = newGame({ ...save.settings, deckIds: save.deckIds, startId: save.startId });
+  const s = newGame({
+    ...save.settings, deckIds: save.deckIds, startId: save.startId,
+    regelstand: save.regelstand ?? 1,
+  });
   for (const mv of save.history) {
     if (!s.drawn) break;
     placeCurrent(s, mv.x, mv.y, mv.rot);
