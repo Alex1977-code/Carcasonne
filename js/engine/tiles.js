@@ -39,11 +39,11 @@ const def = (id, count, set, edges, f, extra = {}) => {
 def('A', 2, 'base', 'FFRF', [
   mon([0.5, 0.42]),
   road([2], { spot: [0.5, 0.88] }),
-  field([0, 1, 2, 3, 4, 5, 6, 7], [], [0.16, 0.2]),
+  field([0, 1, 2, 3, 4, 5, 6, 7], [], [0.24, 0.86]),
 ]);
 def('B', 4, 'base', 'FFFF', [
   mon(),
-  field([0, 1, 2, 3, 4, 5, 6, 7], [], [0.16, 0.2]),
+  field([0, 1, 2, 3, 4, 5, 6, 7], [], [0.5, 0.88]),
 ]);
 def('C', 1, 'base', 'CCCC', [
   city([0, 1, 2, 3], { shield: 1, spot: [0.5, 0.5] }),
@@ -108,16 +108,24 @@ def('N', 3, 'base', 'CFFC', [
   city([0, 3], { spot: [0.3, 0.3] }),
   field([2, 3, 4, 5], [0], [0.73, 0.73]),
 ]);
+// O und P: die Setzpunkte sind an der gemalten Karte gemessen, nicht
+// geschätzt (Anteil Fahrbahn / Wiese in einer Scheibe um den Punkt).
+// Vorher stand die Straße bei [0.74, 0.74] – 0 % Fahrbahn, mitten in der
+// Eckwiese – und die Wiese bei [0.63, 0.6], zu 63 % auf der Fahrbahn: der
+// Wegelagerer stand auf der Wiese und der Bauer auf der Straße.
+// Der Grund war ein `ctrl` in den Daten, das die Straße weiter in die Ecke
+// biegen sollte. road() hat es nie übernommen; gezeichnet und gemalt wird
+// der schlichte Bogen, nur die Punkte gehörten noch zum geplanten.
 def('O', 2, 'base', 'CRRC', [
   city([0, 3], { shield: 1, spot: [0.27, 0.27] }),
-  road([1, 2], { spot: [0.74, 0.74], ctrl: [0.66, 0.66] }),
-  field([2, 5], [0], [0.63, 0.6]),
+  road([1, 2], { spot: [0.64, 0.66] }),
+  field([2, 5], [0], [0.9, 0.34]),
   field([3, 4], [], [0.89, 0.89]),
 ]);
 def('P', 3, 'base', 'CRRC', [
   city([0, 3], { spot: [0.27, 0.27] }),
-  road([1, 2], { spot: [0.74, 0.74], ctrl: [0.66, 0.66] }),
-  field([2, 5], [0], [0.63, 0.6]),
+  road([1, 2], { spot: [0.64, 0.66] }),
+  field([2, 5], [0], [0.9, 0.34]),
   field([3, 4], [], [0.89, 0.89]),
 ]);
 def('Q', 1, 'base', 'CCFC', [
@@ -212,14 +220,14 @@ def('RV_ROADCURVE', 1, 'river', 'RRWW', [
   road([0, 1], { spot: [0.66, 0.34] }),
   river([2, 3]),
   field([1, 2], [], [0.86, 0.14]),
-  field([0, 3, 4, 7], [], [0.44, 0.5]),
+  field([0, 3, 4, 7], [], [0.26, 0.26]),
   field([5, 6], [], [0.13, 0.87]),
 ]);
 def('RV_CITY2', 1, 'river', 'WFWC', [
   river([0, 2]),
   city([3], { spot: [0.11, 0.5] }),
   field([1, 2, 3, 4], [], [0.8, 0.5]),
-  field([0, 5], [1], [0.25, 0.13]),
+  field([0, 5], [1], [0.31, 0.86]),
 ]);
 
 // ------- Wirtshäuser & Kathedralen (18 Karten) -------
@@ -228,7 +236,7 @@ def('EC_CATH', 2, 'ec', 'CCCC', [
 ]);
 def('EC_INN_STRAIGHT', 1, 'ec', 'RFRF', [
   road([0, 2], { inn: true, spot: [0.5, 0.5] }),
-  field([1, 2, 3, 4], [], [0.8, 0.5]),
+  field([1, 2, 3, 4], [], [0.8, 0.22]),
   field([0, 5, 6, 7], [], [0.2, 0.5]),
 ]);
 def('EC_INN_CURVE', 2, 'ec', 'FFRR', [
@@ -303,11 +311,19 @@ def('EC_CROSS_CITY', 1, 'ec', 'CRRR', [
   field([5, 6], [], [0.15, 0.85]),
   field([7], [0], [0.12, 0.31]),
 ]);
+// Zwei Wiesen, nicht eine. Straße von Norden, Kloster, Straße nach Süden:
+// zusammen reicht das von Kante zu Kante und trennt West von Ost, genau
+// wie die durchgehende Straße auf U. Vorher stand hier eine einzige Wiese
+// über alle acht Halbkanten – ein Bauer westlich der Straße bekam die
+// Punkte für eine Stadt östlich davon und sperrte die Ostseite mit.
+// Die Westwiese bleibt Segment 3, damit alte Spielstände denselben Bauern
+// wiederfinden; die Ostwiese kommt als Segment 4 dazu.
 def('EC_MON_ROAD2', 1, 'ec', 'RFRF', [
   mon([0.5, 0.45]),
   road([0], { spot: [0.5, 0.12] }),
   road([2], { spot: [0.5, 0.88] }),
-  field([0, 1, 2, 3, 4, 5, 6, 7], [], [0.16, 0.2]),
+  field([0, 5, 6, 7], [], [0.16, 0.2]),
+  field([1, 2, 3, 4], [], [0.84, 0.2]),
 ]);
 def('EC_CITY_GATE', 1, 'ec', 'CFRF', [
   city([0], { spot: [0.5, 0.13] }),

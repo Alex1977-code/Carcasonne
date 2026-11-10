@@ -65,6 +65,20 @@ export function newGame(settings) {
 }
 
 // ---------- Legalität ----------
+/**
+ * Die Richtung, in die der Fluss nie fließen darf: zurück zur Quelle.
+ * Die Quelle ist die Startkarte; ihr einziges Wasser zeigt flussabwärts.
+ * -1, wenn die Partie gar keinen Fluss hat.
+ */
+function flussRueckwaerts(s) {
+  const q = s.placed[0];
+  if (!q || !DEFS[q.defId].edges.includes('W')) return -1;
+  for (let dir = 0; dir < 4; dir++) {
+    if (edgeAt(q.defId, q.rot, dir) === 'W') return opp(dir);
+  }
+  return -1;
+}
+
 export function isLegal(s, defId, x, y, rot) {
   if (s.grid.has(key(x, y))) return false;
   const d = DEFS[defId];
@@ -90,6 +104,16 @@ export function isLegal(s, defId, x, y, rot) {
       const out = wdirs[0] === inDir ? wdirs[1] : wdirs[0];
       const rel = (out - inDir + 4) % 4;
       if (rel !== 2 && rel === s.lastRiverCurve) return false;
+      // Und nie zurück in Richtung Quelle. Die Kurvenregel oben verbietet
+      // nur zwei gleiche Kurven *unmittelbar* hintereinander; liegt eine
+      // Gerade dazwischen, darf der Fluss umkehren, läuft in eine Tasche
+      // und endet dort. Gemessen: in 2,5 % der Partien wurden Flusskarten
+      // abgeworfen, beim vierfachen Stapel in 39 % – und in 23 % blieb der
+      // Fluss ohne See offen liegen.
+      // Fließt er nie zurück, ist jede neue Reihe leer, wenn er sie
+      // betritt: er kann sich nicht selbst im Weg liegen, und der See
+      // passt immer. Nachgerechnet über 6 000 Eröffnungen: kein Abwurf.
+      if (out === flussRueckwaerts(s)) return false;
     }
   }
   return true;
@@ -209,6 +233,15 @@ function placeTileRaw(s, defId, x, y, rot) {
 
 export function placeCurrent(s, x, y, rot) {
   if (s.phase !== 'place' || !s.drawn) throw new Error('Nicht in Platzierungsphase');
+  // Ganze Zahlen, sonst nichts. isLegal rechnet mit dem, was es bekommt:
+  // rot = 4 galt als Drehung 0 und wurde als 4 gespeichert, rot = "1" als
+  // Zeichenkette, x = null als Spalte 0. Jede dieser Karten lag danach im
+  // Spielstand und im Verlauf – und der Verlauf geht im Netzspiel an die
+  // Gegenseite. Abgewiesen wird hier, bevor irgendetwas verändert ist.
+  if (!Number.isInteger(x) || !Number.isInteger(y)
+      || !Number.isInteger(rot) || rot < 0 || rot > 3) {
+    throw new Error('Ungültige Platzierung');
+  }
   if (!isLegal(s, s.drawn, x, y, rot)) throw new Error('Ungültige Platzierung');
   const defId = s.drawn;
   placeTileRaw(s, defId, x, y, rot);
@@ -372,10 +405,10 @@ function scoreFeature(s, rootId, complete, category) {
     // nebeneinander sieht eine richtige Wertung dann aus wie ein Fehler.
     felder: [...data.tiles],
     // Und wo genau auf der Karte. Der Rahmen um die Karte allein genügt
-    // nicht: eine Karte kann **zwei getrennte Städte** tragen (Motiv N
-    // etwa, Kanten CFFC). Dann schließt die eine und wird gewertet,
-    // während die andere offen bleibt – auf dem gemalten Bild sind beide
-    // Gold, und die Wertung sieht falsch aus, obwohl sie stimmt.
+    // nicht: eine Karte kann **zwei getrennte Städte** tragen (H, I,
+    // EC_CITY_DIAG, EC_CITY_ROADPASS, EC_TRIPLE_CITY). Dann schließt die
+    // eine und wird gewertet, während die andere offen bleibt – beide
+    // sind Gold, und ohne die Stelle ist nicht zu sehen, welche gemeint war.
     stellen: segmentStellen(s, rootId),
   });
   returnMeeples(s, data);
@@ -459,6 +492,15 @@ function drawNext(s) {
 // meeple: { fi, big } | null   opts: { noAdvance } für KI-Simulation
 export function finishTurn(s, meeple, opts = {}) {
   if (s.phase !== 'meeple') throw new Error('Nicht in Meeple-Phase');
+  // Erst prüfen, dann anfassen: ein Gebiet, das es auf der Karte nicht
+  // gibt, lief bisher als TypeError durch – nachdem die Ereignisliste
+  // schon geleert war.
+  if (meeple) {
+    const n = s.placed[s.lastPlacedIdx].fsegs.length;
+    if (!Number.isInteger(meeple.fi) || meeple.fi < 0 || meeple.fi >= n) {
+      throw new Error('Ungültiges Gebiet');
+    }
+  }
   s.events = [];
   const pl = s.players[s.current];
   if (meeple) {

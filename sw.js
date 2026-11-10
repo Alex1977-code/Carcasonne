@@ -16,7 +16,7 @@
 // Wartezeit ist gedeckelt: kommt binnen drei Sekunden nichts, gilt der
 // Cache. Bei schlechtem Empfang startet das Spiel dadurch genauso schnell
 // wie vorher.
-const CACHE = 'carcassonne-v25';
+const CACHE = 'carcassonne-v26';
 const FRIST = 3000;   // so lange wird höchstens auf das Netz gewartet
 const ASSETS = [
   './',
@@ -64,7 +64,6 @@ const ASSETS = [
   './grafik/karten/EC_CITY_FULL.webp',
   './grafik/karten/EC_CITY_GATE.webp',
   './grafik/karten/EC_CITY_ROADPASS.webp',
-  './grafik/karten/EC_CROSS_CITY.webp',
   './grafik/karten/EC_DOUBLE_CURVE.webp',
   './grafik/karten/EC_DOUBLE_CURVE2.webp',
   './grafik/karten/EC_INN_CITYSTRAIGHT.webp',
