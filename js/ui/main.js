@@ -53,6 +53,17 @@ applySoundOptions(options);
 // ---------- Screens ----------
 let currentScreen = 'menu';
 
+// Ein neuer Stand hat übernommen, die Seite ist aber noch die alte. Sie lädt
+// sich neu, sobald dabei niemand etwas verliert: im Hauptmenü, ohne offenen
+// Online-Raum. Mitten in einer Partie nicht – die läuft mit dem Stand zu
+// Ende, mit dem sie begonnen hat.
+let neuerStand = false;
+function neuLadenWennMoeglich() {
+  if (!neuerStand || currentScreen !== 'menu' || online) return;
+  neuerStand = false;
+  location.reload();
+}
+
 // Der Tisch liegt hinter allen Bildschirmen. Während der Partie zeichnet das
 // Brett seinen eigenen Tisch, dann pausiert der Hintergrund.
 startBackdrop(document.getElementById('ambient'), {
@@ -65,7 +76,7 @@ function showScreen(name) {
   $('screen-' + name).classList.add('active');
   currentScreen = name;
   document.body.classList.toggle('in-game', name === 'game');
-  if (name === 'menu') refreshMenu();
+  if (name === 'menu') { refreshMenu(); neuLadenWennMoeglich(); }
   if (name === 'scores') renderScores();
   if (name === 'game') zurueckInsSpiel();
 }
@@ -1456,18 +1467,38 @@ function updateHudSafe() { if (G && currentScreen === 'game') updateHud(); }
 // Service-Worker (offline / installierbar)
 // ============================================================
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  const sw = navigator.serviceWorker;
+  // Beim allerersten Besuch gibt es noch keinen Service Worker. Übernimmt
+  // dann der erste, ist das kein neuer Stand – die Seite ist bereits die
+  // richtige. Jede Übernahme danach ist einer. (Zuerst stand hier „war beim
+  // Laden schon einer da?"; damit ging ein Stand verloren, der noch in
+  // derselben ersten Sitzung eintraf.)
+  let ersteUebernahme = !sw.controller;
+  sw.addEventListener('controllerchange', () => {
+    frageStand();
+    if (ersteUebernahme) { ersteUebernahme = false; return; }
+    neuerStand = true;
+    neuLadenWennMoeglich();
+  });
+  // Den Stand in die Fußzeile – und zwar den, der diese Seite bedient.
+  // Gefragt wurde vorher der „aktive" Worker; das ist nach einer
+  // Aktualisierung schon der neue, während die Seite noch die alte ist.
+  sw.addEventListener('message', (e) => {
+    const el = document.getElementById('stand');
+    if (el && e.data && typeof e.data.version === 'string') el.textContent = e.data.version;
+  });
+  const frageStand = () => { if (sw.controller) sw.controller.postMessage('version'); };
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline-Cache optional */ });
-    // Den tatsächlich ausgelieferten Stand in die Fußzeile schreiben. Vorher
-    // stand dort eine fest verdrahtete Zahl; am Gerät ließ sich damit nicht
-    // feststellen, ob eine Korrektur überhaupt angekommen war.
-    navigator.serviceWorker.addEventListener('message', (e) => {
-      const el = document.getElementById('stand');
-      if (el && e.data && e.data.version) el.textContent = e.data.version.replace('carcassonne-', '');
-    });
-    navigator.serviceWorker.ready.then((reg) => {
-      (reg.active || navigator.serviceWorker.controller)?.postMessage('version');
-    }).catch(() => { /* ohne Service-Worker bleibt die Fußzeile, wie sie ist */ });
+    // updateViaCache 'none': sw.js selbst nie aus dem HTTP-Zwischenspeicher.
+    // An ihr hängt, ob ein neuer Stand überhaupt bemerkt wird.
+    sw.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+      // Eine installierte App wird selten neu geladen – sie kommt aus dem
+      // Hintergrund zurück. Dann nachsehen.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => { /* offline */ });
+      });
+    }).catch(() => { /* ohne Service Worker läuft das Spiel trotzdem */ });
+    sw.ready.then(frageStand).catch(() => { /* Fußzeile bleibt, wie sie ist */ });
   });
 }
 

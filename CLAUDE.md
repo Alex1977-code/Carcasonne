@@ -328,4 +328,41 @@ Bitmap wie nötig).
 3. `node tools/kacheln-schneiden.mjs`
 4. Motiv-Kürzel in `js/ui/render/paintings.js` (Liste `GEMALT`) **und** in
    `sw.js` — ohne beides bleibt es bei der gezeichneten Karte
-5. `node tests/regeln.test.mjs` und die übrigen Suiten
+5. `node tools/karten-wiesen-pruefen.mjs`
+6. `node tools/sw-stand.mjs` — sonst kommt die Änderung auf keinem Gerät an
+7. `node tests/regeln.test.mjs` und die übrigen Suiten
+
+## Jede Änderung an ausgelieferten Dateien: `sw-stand`
+
+    node tools/sw-stand.mjs       # als letzter Schritt vor dem Commit
+    node tools/sw-pruefen.mjs     # nach Änderungen an sw.js selbst
+
+Der Service Worker liefert das Spiel aus einem Speicher, der je Stand
+einmal vollständig gefüllt wird. Dass es einen neuen Stand gibt, merkt der
+Browser an genau einer Sache: `sw.js` hat sich geändert. In ihr steht
+deshalb eine Prüfsumme über alle ausgelieferten Dateien; `sw-stand.mjs`
+rechnet sie neu und erhöht die Nummer, `tests/sw.test.mjs` prüft sie in
+der CI. Vergessen fällt damit vor dem Merge auf – am Telefon hieße es,
+dass die Korrektur nie ankommt.
+
+Warum nicht mehr „Netz zuerst": das hielt das Spiel aktuell, mischte aber.
+Kam nach einer neuen Fassung eine einzige Datei nicht binnen drei
+Sekunden, lief die neue `main.js` gegen die alte `render.js`; fehlte dort
+ein importierter Name, startete die App nicht – und weil die neuen Dateien
+einzeln in den Speicher geschrieben wurden, auch ohne Netz nicht.
+`sw-pruefen.mjs` stellt das mit zwei Fassungen und einem Server nach, der
+hängen, scheitern und ausfallen kann.
+
+Aktuell bleibt das Spiel trotzdem: beim Öffnen wird der neue Stand im
+Hintergrund vollständig geholt, übernimmt, und die Seite lädt sich neu,
+sobald sie im Hauptmenü steht. Gemessen 3,1 s nach dem Öffnen. Mitten in
+einer Partie wird nicht neu geladen.
+
+Zwei Dinge, die dabei falsch waren und nicht wiederkommen dürfen:
+
+* **Aufräumen nur mit Vorsilbe.** Beim Aktivieren wurde jeder Speicher
+  gelöscht, der nicht der eigene war – unter derselben Adresse liegen
+  aber auch andere Spiele.
+* **Nur das Spiel ist „die Seite".** Jede Seitennavigation im Ordner
+  wurde als `index.html` gespeichert; wer `debug/gallery.html` öffnete,
+  bekam ohne Netz danach die Galerie statt des Spiels.
